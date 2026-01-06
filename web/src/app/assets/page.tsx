@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { pb } from '@/lib/pocketbase';
 import { AppShell } from '@/components/AppShell';
-import { Card } from '@/components/ui/Card';
+import { Card, CardImage } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 
@@ -109,24 +109,25 @@ export default function AssetsPage() {
   return (
     <AppShell>
       <div className="flex items-center justify-between mb-8">
-        <h1 className="text-4xl font-bold">Assets</h1>
+        <h1 className="text-4xl font-bold text-zinc-900">资产总览</h1>
         {isAdmin && (
           <Link href="/assets/import">
-            <Button>Import Assets</Button>
+            <Button>导入资产</Button>
           </Link>
         )}
       </div>
 
       {loading ? (
-        <p>Loading...</p>
+        <p>加载中...</p>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {groups.map((group) => (
             <Card key={group.description} className="p-6 flex flex-col gap-4">
-              <h2 className="text-xl font-semibold">{group.description}</h2>
+              <CardImage />
+              <h2 className="text-xl font-semibold text-zinc-900">{group.description}</h2>
               <div className="flex gap-2">
-                <Badge variant="success">{group.available} Available</Badge>
-                <Badge variant="warning">{group.borrowed} Borrowed</Badge>
+                <Badge tone="green">可借 {group.available}</Badge>
+                <Badge tone="blue">已借 {group.borrowed}</Badge>
               </div>
               <div className="flex gap-2 mt-auto">
                 <Button
@@ -135,7 +136,7 @@ export default function AssetsPage() {
                   disabled={group.available === 0}
                   onClick={() => handleBorrow(group.description)}
                 >
-                  Borrow
+                  借出
                 </Button>
                 <Button
                   variant="secondary"
@@ -145,11 +146,11 @@ export default function AssetsPage() {
                     if (holds) {
                       handleReturn(group.description);
                     } else {
-                      alert('You do not have any borrowed asset of this type');
+                      alert('您没有借用此类型的资产');
                     }
                   }}
                 >
-                  Return
+                  归还
                 </Button>
               </div>
             </Card>

@@ -28,7 +28,7 @@ export default function SettingsPage() {
     setError('');
     setSuccess('');
     if (newPassword !== confirmPassword) {
-      setError('Passwords do not match');
+      setError('密码不匹配');
       return;
     }
     setLoading(true);
@@ -37,11 +37,11 @@ export default function SettingsPage() {
         password: newPassword,
         passwordConfirm: newPassword,
       });
-      setSuccess('Password updated successfully');
+      setSuccess('密码更新成功');
       setNewPassword('');
       setConfirmPassword('');
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Failed to update password');
+      setError(err instanceof Error ? err.message : '密码更新失败');
     } finally {
       setLoading(false);
     }
@@ -49,21 +49,21 @@ export default function SettingsPage() {
 
   return (
     <AppShell>
-      <h1 className="text-4xl font-bold mb-8">Settings</h1>
+      <h1 className="text-4xl font-bold text-zinc-900 mb-8">设置</h1>
 
       <Card className="max-w-xl px-10 py-8">
-        <h2 className="text-2xl font-semibold mb-6">Change Password</h2>
+        <h2 className="text-2xl font-semibold text-zinc-900 mb-6">修改密码</h2>
         <form onSubmit={handlePasswordChange} className="flex flex-col gap-4">
           <Input
             type="password"
-            placeholder="New Password"
+            placeholder="新密码"
             value={newPassword}
             onChange={(e) => setNewPassword(e.target.value)}
             required
           />
           <Input
             type="password"
-            placeholder="Confirm Password"
+            placeholder="确认密码"
             value={confirmPassword}
             onChange={(e) => setConfirmPassword(e.target.value)}
             required
@@ -71,7 +71,7 @@ export default function SettingsPage() {
           {error && <p className="text-red-500 text-sm">{error}</p>}
           {success && <p className="text-green-600 text-sm">{success}</p>}
           <Button type="submit" disabled={loading} className="mt-2">
-            {loading ? 'Updating...' : 'Update Password'}
+            {loading ? '更新中...' : '更新密码'}
           </Button>
         </form>
       </Card>

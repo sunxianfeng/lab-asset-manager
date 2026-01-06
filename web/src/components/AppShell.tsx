@@ -13,12 +13,12 @@ export function AppShell({
       <nav className="glass-strong px-5 py-4 sm:px-6 mb-8">
         <div className="flex items-center justify-between gap-4">
           <Link href="/assets" className="text-lg font-extrabold tracking-tight">
-            Asset Manager
+            资产管理系统
           </Link>
           <div className="flex gap-4 text-sm">
-            <Link href="/assets" className="hover:underline">Assets</Link>
-            <Link href="/records" className="hover:underline">Records</Link>
-            <Link href="/settings" className="hover:underline">Settings</Link>
+            <Link href="/assets" className="hover:underline">资产</Link>
+            <Link href="/records" className="hover:underline">记录</Link>
+            <Link href="/settings" className="hover:underline">设置</Link>
           </div>
         </div>
       </nav>

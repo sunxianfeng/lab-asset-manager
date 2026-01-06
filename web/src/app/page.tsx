@@ -7,6 +7,7 @@ import {
   CardDescription,
   CardHeader,
   CardTitle,
+  CardImage,
 } from "@/components/ui/Card";
 import Link from "next/link";
 
@@ -29,7 +30,7 @@ export default function Home() {
       <section className="space-y-5 sm:space-y-6">
         <div className="flex items-end justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-extrabold tracking-tight sm:text-3xl">
+            <h1 className="text-2xl font-extrabold tracking-tight sm:text-3xl text-[var(--app-fg)]">
               资产总览
             </h1>
             <p className="mt-2 text-sm text-[var(--app-muted)]">
@@ -41,6 +42,7 @@ export default function Home() {
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
           {Array.from({ length: 6 }).map((_, i) => (
             <Card key={i}>
+              <CardImage />
               <CardHeader>
                 <div className="min-w-0">
                   <CardTitle className="truncate">资产条目示例 {i + 1}</CardTitle>

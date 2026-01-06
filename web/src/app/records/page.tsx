@@ -47,19 +47,19 @@ export default function RecordsPage() {
 
   return (
     <AppShell>
-      <h1 className="text-4xl font-bold mb-8">Borrow/Return Records</h1>
+      <h1 className="text-4xl font-bold text-zinc-900 mb-8">借还记录</h1>
 
       {loading ? (
-        <p>Loading...</p>
+        <p>加载中...</p>
       ) : (
         <div className="bg-white/60 backdrop-blur-[20px] rounded-[24px] p-6">
           <table className="w-full">
             <thead>
               <tr className="border-b">
-                <th className="text-left p-3 font-semibold">User</th>
-                <th className="text-left p-3 font-semibold">Asset</th>
-                <th className="text-left p-3 font-semibold">Action</th>
-                <th className="text-left p-3 font-semibold">Date</th>
+                <th className="text-left p-3 font-semibold">用户</th>
+                <th className="text-left p-3 font-semibold">资产</th>
+                <th className="text-left p-3 font-semibold">操作</th>
+                <th className="text-left p-3 font-semibold">日期</th>
               </tr>
             </thead>
             <tbody>
@@ -67,8 +67,8 @@ export default function RecordsPage() {
                 <tr key={rec.id} className="border-b hover:bg-zinc-50/50">
                   <td className="p-3">{rec.user}</td>
                   <td className="p-3">{rec.asset_description}</td>
-                  <td className="p-3">{rec.action}</td>
-                  <td className="p-3">{new Date(rec.created).toLocaleString()}</td>
+                  <td className="p-3">{rec.action === 'lend' ? '借出' : '归还'}</td>
+                  <td className="p-3">{new Date(rec.created).toLocaleString('zh-CN')}</td>
                 </tr>
               ))}
             </tbody>
