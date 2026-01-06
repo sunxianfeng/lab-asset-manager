@@ -9,16 +9,16 @@ export function AppShell({
   className?: string;
 }) {
   return (
-    <div className={cn("min-h-screen bg-zinc-50", className)}>
+    <div className={cn("min-h-screen bg-zinc-50 dark:bg-zinc-900", className)}>
       <nav className="glass-strong px-5 py-4 sm:px-6 mb-8">
         <div className="flex items-center justify-between gap-4">
-          <Link href="/assets" className="text-lg font-extrabold tracking-tight">
+          <Link href="/assets" className="text-lg font-extrabold tracking-tight text-black dark:text-white">
             资产管理系统
           </Link>
-          <div className="flex gap-4 text-sm">
-            <Link href="/assets" className="hover:underline">资产</Link>
-            <Link href="/records" className="hover:underline">记录</Link>
-            <Link href="/settings" className="hover:underline">设置</Link>
+          <div className="flex gap-4 text-sm font-medium text-zinc-700 dark:text-zinc-200">
+            <Link href="/assets" className="hover:text-black dark:hover:text-white transition-colors">资产</Link>
+            <Link href="/records" className="hover:text-black dark:hover:text-white transition-colors">记录</Link>
+            <Link href="/settings" className="hover:text-black dark:hover:text-white transition-colors">设置</Link>
           </div>
         </div>
       </nav>

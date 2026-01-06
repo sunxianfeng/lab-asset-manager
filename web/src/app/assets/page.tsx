@@ -109,7 +109,7 @@ export default function AssetsPage() {
   return (
     <AppShell>
       <div className="flex items-center justify-between mb-8">
-        <h1 className="text-4xl font-bold text-zinc-900">资产总览</h1>
+        <h1 className="text-4xl font-bold text-black dark:text-white">资产总览</h1>
         {isAdmin && (
           <Link href="/assets/import">
             <Button>导入资产</Button>
@@ -122,36 +122,38 @@ export default function AssetsPage() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {groups.map((group) => (
-            <Card key={group.description} className="p-6 flex flex-col gap-4">
-              <CardImage />
-              <h2 className="text-xl font-semibold text-zinc-900">{group.description}</h2>
-              <div className="flex gap-2">
-                <Badge tone="green">可借 {group.available}</Badge>
-                <Badge tone="blue">已借 {group.borrowed}</Badge>
-              </div>
-              <div className="flex gap-2 mt-auto">
-                <Button
-                  variant="primary"
-                  size="sm"
-                  disabled={group.available === 0}
-                  onClick={() => handleBorrow(group.description)}
-                >
-                  借出
-                </Button>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={async () => {
-                    const holds = await checkIfUserHoldAsset(group.description);
-                    if (holds) {
-                      handleReturn(group.description);
-                    } else {
-                      alert('您没有借用此类型的资产');
-                    }
-                  }}
-                >
-                  归还
-                </Button>
+            <Card key={group.description} className="p-0 overflow-hidden flex flex-col">
+              <CardImage className="rounded-none rounded-t-[24px]" />
+              <div className="p-5 flex flex-col gap-3 flex-1">
+                <h2 className="text-lg font-bold text-black dark:text-white">{group.description}</h2>
+                <div className="flex flex-wrap gap-2">
+                  <Badge tone="green">可借 {group.available}</Badge>
+                  <Badge tone="blue">已借 {group.borrowed}</Badge>
+                </div>
+                <div className="flex gap-2 mt-auto pt-2">
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    disabled={group.available === 0}
+                    onClick={() => handleBorrow(group.description)}
+                  >
+                    借出
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={async () => {
+                      const holds = await checkIfUserHoldAsset(group.description);
+                      if (holds) {
+                        handleReturn(group.description);
+                      } else {
+                        alert('您没有借用此类型的资产');
+                      }
+                    }}
+                  >
+                    归还
+                  </Button>
+                </div>
               </div>
             </Card>
           ))}

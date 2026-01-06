@@ -52,23 +52,23 @@ export function CardImage({
   ...props
 }: React.ImgHTMLAttributes<HTMLImageElement>) {
   return (
-    <div className={cn("mb-4 aspect-video w-full overflow-hidden rounded-[16px] bg-zinc-200/50", className)}>
+    <div className={cn("aspect-[4/3] w-full overflow-hidden rounded-[16px] bg-gradient-to-br from-zinc-100 to-zinc-200 dark:from-zinc-700 dark:to-zinc-800", className)}>
       {src ? (
         <img
           src={src}
-          alt={alt || "Asset image"}
+          alt={alt || "资产图片"}
           className="h-full w-full object-cover"
           {...props}
         />
       ) : (
-        <div className="flex h-full w-full items-center justify-center text-zinc-400">
+        <div className="flex h-full w-full items-center justify-center text-zinc-400 dark:text-zinc-500">
           <svg
             xmlns="http://www.w3.org/2000/svg"
             fill="none"
             viewBox="0 0 24 24"
-            strokeWidth={1.5}
+            strokeWidth={1.2}
             stroke="currentColor"
-            className="h-12 w-12"
+            className="h-16 w-16"
           >
             <path
               strokeLinecap="round"
