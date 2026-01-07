@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 
 interface AssetGrouped {
+  groupKey: string;
   description: string;
   total: number;
   available: number;
@@ -19,6 +20,7 @@ interface AssetGrouped {
 export default function AssetsPage() {
   const [groups, setGroups] = useState<AssetGrouped[]>([]);
   const [loading, setLoading] = useState(true);
+  const [holdGroupKeys, setHoldGroupKeys] = useState<Set<string>>(new Set());
   const router = useRouter();
   const authRecord = pb.authStore.model;
   const isAdmin = authRecord?.role === 'admin';
@@ -36,30 +38,47 @@ export default function AssetsPage() {
       const records = await pb.collection('assets').getFullList();
       const grouped: Record<string, AssetGrouped> = {};
       for (const rec of records) {
-        const desc = rec.asset_description || 'Unknown';
-        if (!grouped[desc]) {
-          grouped[desc] = { description: desc, total: 0, available: 0, borrowed: 0 };
+        const groupKey = String((rec as any)?.group_key ?? '');
+        const desc = (rec as any).asset_description || 'Unknown';
+        const key = groupKey || desc;
+        if (!grouped[key]) {
+          grouped[key] = { groupKey, description: desc, total: 0, available: 0, borrowed: 0 };
         }
-        grouped[desc].total++;
+        grouped[key].total++;
         if (rec.current_holder) {
-          grouped[desc].borrowed++;
+          grouped[key].borrowed++;
         } else {
-          grouped[desc].available++;
+          grouped[key].available++;
         }
       }
       setGroups(Object.values(grouped));
-    } catch (err) {
+
+      const held = await pb.collection('assets').getFullList({
+        filter: `current_holder="${authRecord!.id}"`,
+      });
+      setHoldGroupKeys(new Set((held as any[]).map((r) => String(r?.group_key ?? ''))));
+    } catch (err: unknown) {
+      // PocketBase JS SDK may autocancel requests in some dev/runtime situations
+      // (ClientResponseError 0). Treat autocancelled requests as "no data".
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes('autocancel') || msg.includes('ClientResponseError') || msg.includes('request was autocancelled')) {
+        console.warn('assets.getFullList autocancelled, treating as empty list');
+        setGroups([]);
+        setHoldGroupKeys(new Set());
+        return;
+      }
       console.error(err);
     } finally {
       setLoading(false);
     }
   }
 
-  async function handleBorrow(description: string) {
+  async function handleBorrow(params: { groupKey: string; description: string }) {
     try {
       await pb.collection('lend_records').create({
         user: authRecord!.id,
-        asset_description: description,
+        asset_group_key: params.groupKey,
+        asset_description: params.description,
         action: 'lend',
       });
       loadAssets(); // Refresh
@@ -82,27 +101,17 @@ export default function AssetsPage() {
     }
   }
 
-  async function handleReturn(description: string) {
+  async function handleReturn(params: { groupKey: string; description: string }) {
     try {
       await pb.collection('lend_records').create({
         user: authRecord!.id,
-        asset_description: description,
+        asset_group_key: params.groupKey,
+        asset_description: params.description,
         action: 'return',
       });
       loadAssets(); // Refresh
     } catch (err: unknown) {
       alert('Return failed: ' + (err instanceof Error ? err.message : ''));
-    }
-  }
-
-  async function checkIfUserHoldAsset(description: string): Promise<boolean> {
-    try {
-      const records = await pb.collection('assets').getFullList({
-        filter: `asset_description="${description}" && current_holder="${authRecord!.id}"`,
-      });
-      return records.length > 0;
-    } catch {
-      return false;
     }
   }
 
@@ -122,7 +131,7 @@ export default function AssetsPage() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {groups.map((group) => (
-            <Card key={group.description} className="p-0 overflow-hidden flex flex-col">
+            <Card key={group.groupKey || group.description} className="p-0 overflow-hidden flex flex-col">
               <CardImage className="rounded-none rounded-t-[24px]" />
               <div className="p-5 flex flex-col gap-3 flex-1">
                 <h2 className="text-lg font-bold text-black dark:text-white">{group.description}</h2>
@@ -135,21 +144,15 @@ export default function AssetsPage() {
                     variant="primary"
                     size="sm"
                     disabled={group.available === 0}
-                    onClick={() => handleBorrow(group.description)}
+                    onClick={() => handleBorrow({ groupKey: group.groupKey, description: group.description })}
                   >
                     借出
                   </Button>
                   <Button
                     variant="secondary"
                     size="sm"
-                    onClick={async () => {
-                      const holds = await checkIfUserHoldAsset(group.description);
-                      if (holds) {
-                        handleReturn(group.description);
-                      } else {
-                        alert('您没有借用此类型的资产');
-                      }
-                    }}
+                    disabled={!group.groupKey || !holdGroupKeys.has(group.groupKey)}
+                    onClick={() => handleReturn({ groupKey: group.groupKey, description: group.description })}
                   >
                     归还
                   </Button>

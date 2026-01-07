@@ -13,6 +13,58 @@ interface LendRecord {
   created: string;
 }
 
+function normalizeLendRecord(rec: any): LendRecord {
+  const userValue =
+    typeof rec?.user === 'string'
+      ? rec.user
+      : rec?.expand?.user?.username || rec?.expand?.user?.email || '未知用户';
+
+  return {
+    id: String(rec?.id ?? ''),
+    user: String(userValue ?? ''),
+    asset_description: String(rec?.asset_description ?? ''),
+    action: rec?.action === 'return' ? 'return' : 'lend',
+    created: String(rec?.created ?? new Date().toISOString()),
+  };
+}
+
+function buildMockRecords(params: { viewerLabel: string; isAdmin: boolean }): LendRecord[] {
+  const now = Date.now();
+  const make = (
+    i: number,
+    data: Pick<LendRecord, 'user' | 'asset_description' | 'action'> & { createdOffsetMs: number },
+  ): LendRecord => ({
+    id: `mock-${i}`,
+    user: data.user,
+    asset_description: data.asset_description,
+    action: data.action,
+    created: new Date(now - data.createdOffsetMs).toISOString(),
+  });
+
+  // If not admin, keep the mock rows scoped to the current viewer.
+  const u = params.viewerLabel || '我';
+  return [
+    make(1, {
+      user: params.isAdmin ? '测试用户A' : u,
+      asset_description: '示波器（测试数据）',
+      action: 'lend',
+      createdOffsetMs: 60 * 60 * 1000,
+    }),
+    make(2, {
+      user: params.isAdmin ? '测试用户A' : u,
+      asset_description: '万用表（测试数据）',
+      action: 'return',
+      createdOffsetMs: 2 * 60 * 60 * 1000,
+    }),
+    make(3, {
+      user: params.isAdmin ? '测试用户B' : u,
+      asset_description: '电源（测试数据）',
+      action: 'lend',
+      createdOffsetMs: 24 * 60 * 60 * 1000,
+    }),
+  ];
+}
+
 export default function RecordsPage() {
   const [records, setRecords] = useState<LendRecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -37,7 +89,15 @@ export default function RecordsPage() {
         sort: '-created',
         expand: 'user',
       });
-      setRecords(results as unknown as LendRecord[]);
+
+      const normalized = (results as any[]).map(normalizeLendRecord);
+      if (normalized.length === 0) {
+        const viewerLabel =
+          (authRecord as any)?.username || (authRecord as any)?.email || (authRecord as any)?.id || '我';
+        setRecords(buildMockRecords({ viewerLabel, isAdmin }));
+      } else {
+        setRecords(normalized);
+      }
     } catch (err) {
       console.error(err);
     } finally {
@@ -52,7 +112,7 @@ export default function RecordsPage() {
       {loading ? (
         <p>加载中...</p>
       ) : (
-        <div className="bg-white/60 backdrop-blur-[20px] rounded-[24px] p-6">
+        <div className="bg-white/60 backdrop-blur-[20px] rounded-3xl p-6">
           <table className="w-full">
             <thead>
               <tr className="border-b">

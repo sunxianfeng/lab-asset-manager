@@ -8,6 +8,15 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Card } from '@/components/ui/Card';
 
+type PocketBaseError = {
+  status?: number;
+  message?: string;
+  data?: {
+    message?: string;
+    data?: Record<string, { message?: string }>;
+  };
+};
+
 export default function RegisterPage() {
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
@@ -41,6 +50,7 @@ export default function RegisterPage() {
         email,
         password,
         passwordConfirm,
+        role: 'user',
         emailVisibility: true,
       });
 
@@ -50,11 +60,18 @@ export default function RegisterPage() {
       // Redirect to assets page
       router.push('/assets');
     } catch (err: unknown) {
-      if (err instanceof Error) {
-        setError(err.message);
-      } else {
-        setError('注册失败，请检查输入信息');
-      }
+      const pbErr = err as PocketBaseError;
+      const fieldErrors = pbErr?.data?.data;
+      const firstFieldMessage = fieldErrors
+        ? Object.values(fieldErrors).find((v) => v?.message)?.message
+        : undefined;
+
+      setError(
+        firstFieldMessage ||
+          pbErr?.data?.message ||
+          pbErr?.message ||
+          '注册失败，请检查输入信息'
+      );
     } finally {
       setLoading(false);
     }
@@ -103,7 +120,7 @@ export default function RegisterPage() {
         </form>
         <div className="mt-6 text-center text-sm text-zinc-600">
           已有账户？{' '}
-          <Link href="/auth/login" className="text-[var(--accent)] hover:underline font-semibold">
+          <Link href="/auth/login" className="text-(--accent) hover:underline font-semibold">
             立即登录
           </Link>
         </div>
