@@ -4,9 +4,13 @@ import { cn } from "@/lib/cn";
 export function AppShell({
   children,
   className,
+  title,
+  actions,
 }: {
   children: React.ReactNode;
   className?: string;
+  title?: string;
+  actions?: React.ReactNode;
 }) {
   return (
     <div className={cn("min-h-screen bg-zinc-50 dark:bg-zinc-900", className)}>
@@ -23,7 +27,18 @@ export function AppShell({
         </div>
       </nav>
 
-      <main className="px-5 sm:px-6 max-w-7xl mx-auto">{children}</main>
+      <main className="px-5 sm:px-6 max-w-7xl mx-auto">
+        {(title || actions) && (
+          <div className="flex items-center justify-between mb-6">
+            {title ? (
+              <h1 className="text-4xl font-bold text-black dark:text-white">{title}</h1>
+            ) : null}
+            {actions ? <div>{actions}</div> : null}
+          </div>
+        )}
+
+        {children}
+      </main>
 
       <footer className="py-6 text-center text-xs text-[var(--app-muted)]">
         Powered by Next.js + PocketBase

@@ -14,7 +14,7 @@ export async function connectDoorSerial(): Promise<void> {
   }
 
   // Request user to pick a serial device
-  port = await navigator.serial.requestPort();
+  port = await navigator.serial!.requestPort();
   await port.open({ baudRate: 9600 });
 }
 

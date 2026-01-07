@@ -1,0 +1,1 @@
+Error: failed to apply migration 1700000000_init_collections.js: ReferenceError: Dao is not defined at C:\Users\z0052whh\Desktop\repo\lab-asset-manager\pocketbase\pb.js:5:21(1)

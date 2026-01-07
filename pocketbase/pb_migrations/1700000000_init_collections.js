@@ -4,6 +4,21 @@ migrate(
   (db) => {
     const dao = new Dao(db);
 
+    // In local development it's common to end up with a partially-initialized db
+    // (e.g. after a failed start). Drop known collections first to avoid
+    // UNIQUE constraint errors on _collections.name.
+    const dropIfExists = (nameOrId) => {
+      try {
+        dao.deleteCollection(dao.findCollectionByNameOrId(nameOrId));
+      } catch (_) {}
+    };
+
+    // reverse dependency order
+    dropIfExists("lend_records");
+    dropIfExists("assets");
+    dropIfExists("asset_imports");
+    dropIfExists("users");
+
     // users (auth)
     {
       const collection = new Collection({
