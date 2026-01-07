@@ -22,8 +22,13 @@ export default function AssetsPage() {
   const [loading, setLoading] = useState(true);
   const [holdGroupKeys, setHoldGroupKeys] = useState<Set<string>>(new Set());
   const router = useRouter();
-  const authRecord = pb.authStore.model;
-  const isAdmin = authRecord?.role === 'admin';
+  const [mounted, setMounted] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+    const authRecord = pb.authStore.model;
+    setIsAdmin(authRecord?.role === 'admin');
+  }, []);
 
   useEffect(() => {
     if (!pb.authStore.isValid) {
@@ -35,6 +40,7 @@ export default function AssetsPage() {
 
   async function loadAssets() {
     try {
+      const authRecord = pb.authStore.model;
       const records = await pb.collection('assets').getFullList();
       const grouped: Record<string, AssetGrouped> = {};
       for (const rec of records) {
@@ -53,6 +59,10 @@ export default function AssetsPage() {
       }
       setGroups(Object.values(grouped));
 
+      if (!authRecord?.id) {
+        setHoldGroupKeys(new Set());
+        return;
+      }
       const held = await pb.collection('assets').getFullList({
         filter: `current_holder="${authRecord!.id}"`,
       });
@@ -75,6 +85,11 @@ export default function AssetsPage() {
 
   async function handleBorrow(params: { groupKey: string; description: string }) {
     try {
+      const authRecord = pb.authStore.model;
+      if (!authRecord?.id) {
+        router.push('/auth/login');
+        return;
+      }
       await pb.collection('lend_records').create({
         user: authRecord!.id,
         asset_group_key: params.groupKey,
@@ -103,6 +118,11 @@ export default function AssetsPage() {
 
   async function handleReturn(params: { groupKey: string; description: string }) {
     try {
+      const authRecord = pb.authStore.model;
+      if (!authRecord?.id) {
+        router.push('/auth/login');
+        return;
+      }
       await pb.collection('lend_records').create({
         user: authRecord!.id,
         asset_group_key: params.groupKey,
@@ -119,9 +139,16 @@ export default function AssetsPage() {
     <AppShell>
       <div className="flex items-center justify-between mb-8">
         <h1 className="text-4xl font-bold text-black dark:text-white">资产总览</h1>
-        {isAdmin && (
-          <Link href="/assets/import">
-            <Button>导入资产</Button>
+        {mounted && isAdmin && (
+          <Link
+            href="/assets/import"
+            className={
+              "inline-flex items-center justify-center gap-2 rounded-[14px] font-semibold tracking-tight " +
+              "transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-transparent " +
+              "select-none bg-[var(--accent)] text-white hover:brightness-95 active:brightness-90 h-11 px-4 text-[15px]"
+            }
+          >
+            导入资产
           </Link>
         )}
       </div>
@@ -129,7 +156,7 @@ export default function AssetsPage() {
       {loading ? (
         <p>加载中...</p>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid gap-6 grid-cols-[repeat(auto-fit,minmax(280px,1fr))]">
           {groups.map((group) => (
             <Card key={group.groupKey || group.description} className="p-0 overflow-hidden flex flex-col">
               <CardImage className="rounded-none rounded-t-[24px]" />

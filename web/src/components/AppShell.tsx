@@ -27,7 +27,7 @@ export function AppShell({
         </div>
       </nav>
 
-      <main className="px-5 sm:px-6 max-w-7xl mx-auto">
+      <main className="px-5 sm:px-6 max-w-screen-2xl mx-auto">
         {(title || actions) && (
           <div className="flex items-center justify-between mb-6">
             {title ? (
