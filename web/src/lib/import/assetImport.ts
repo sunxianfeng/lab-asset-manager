@@ -16,6 +16,7 @@ export type AssetUnitCreate = {
   metrology_requirement?: string;
   metrology_cost?: number;
   remarks?: string;
+  image_url?: string;
   asset_name?: string;
   group_key: string;
   status: "available" | "borrowed";
@@ -36,7 +37,25 @@ const headerMap: Record<string, keyof AssetUnitCreate> = {
   "Metrology Requirement": "metrology_requirement",
   "Metrology Cost": "metrology_cost",
   Remarks: "remarks",
+  "Image URL": "image_url",
 };
+
+// Normalize header text to be resilient to case/spacing/punctuation differences
+function normalizeHeaderKey(h: string) {
+  const s = String(h);
+  // Normalize unicode and replace all non-letter/number with single spaces
+  const proto = String.prototype as unknown as { normalize?: (form?: string) => string };
+  const cleaned = typeof proto.normalize === "function" ? proto.normalize.call(s, "NFKC") : s;
+  return cleaned
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .trim()
+    .toLowerCase();
+}
+
+// Build a normalized header map so variants like "value cny" match "Value (CNY)"
+const normalizedHeaderMap: Record<string, keyof AssetUnitCreate> = Object.fromEntries(
+  Object.entries(headerMap).map(([k, v]) => [normalizeHeaderKey(k), v])
+);
 
 function asString(v: unknown) {
   if (v === null || v === undefined) return undefined;
@@ -85,7 +104,10 @@ export function parseAssetFile(file: File): Promise<RawAssetRow[]> {
     const sheetName = wb.SheetNames[0];
     if (!sheetName) return [];
     const ws = wb.Sheets[sheetName];
-    const rows = XLSX.utils.sheet_to_json(ws, { defval: "" }) as RawAssetRow[];
+    const rows = XLSX.utils.sheet_to_json(ws, {
+      defval: "",
+      raw: true, // Keep raw values for things like images
+    }) as RawAssetRow[];
     return rows;
   });
 }
@@ -100,7 +122,7 @@ export function rowsToAssetUnits(rows: RawAssetRow[]): AssetUnitCreate[] {
     };
 
     for (const [header, value] of Object.entries(row)) {
-      const key = headerMap[header];
+      const key = normalizedHeaderMap[normalizeHeaderKey(header)];
       if (!key) continue;
 
       switch (key) {
@@ -137,6 +159,9 @@ export function rowsToAssetUnits(rows: RawAssetRow[]): AssetUnitCreate[] {
         case "manufacturer":
           unit.manufacturer = asString(value);
           break;
+        case "image_url":
+          unit.image_url = asString(value);
+          break;
         case "metrology_requirement":
           unit.metrology_requirement = asString(value);
           break;
@@ -155,6 +180,28 @@ export function rowsToAssetUnits(rows: RawAssetRow[]): AssetUnitCreate[] {
     unit.group_key = normalizeGroupKey(desc);
 
     units.push(unit as AssetUnitCreate);
+  }
+
+  return units;
+}
+
+export type AssetUnitCreateWithSourceRow = {
+  unit: AssetUnitCreate;
+  /** 0-based index within `rows` (data rows only; header row already removed by sheet_to_json). */
+  sourceRowIndex: number;
+};
+
+/**
+ * Like `rowsToAssetUnits`, but preserves original row index so callers can map drawings/images to rows.
+ */
+export function rowsToAssetUnitsWithSourceRow(rows: RawAssetRow[]): AssetUnitCreateWithSourceRow[] {
+  const units: AssetUnitCreateWithSourceRow[] = [];
+
+  for (let sourceRowIndex = 0; sourceRowIndex < rows.length; sourceRowIndex++) {
+    const row = rows[sourceRowIndex]!;
+    const parsed = rowsToAssetUnits([row]);
+    if (!parsed.length) continue;
+    units.push({ unit: parsed[0]!, sourceRowIndex });
   }
 
   return units;

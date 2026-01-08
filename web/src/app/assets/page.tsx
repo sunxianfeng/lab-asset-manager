@@ -15,6 +15,30 @@ interface AssetGrouped {
   total: number;
   available: number;
   borrowed: number;
+  imageUrl?: string;
+}
+
+// Narrow asset record type used by this page to avoid `any`.
+interface AssetRecord {
+  id: string;
+  group_key?: string;
+  asset_description?: string;
+  current_holder?: string;
+  image?: string;
+  // Optional fields used elsewhere in app/export
+  is_fixed_assets?: string;
+  category?: string;
+  serial_no?: string;
+  location?: string;
+  user?: string;
+  manufacturer?: string;
+  value_cny?: number | string;
+  commissioning_time?: string;
+  metrology_validity_period?: string;
+  metrology_requirement?: string;
+  metrology_cost?: number | string;
+  remarks?: string;
+  asset_name?: string;
 }
 
 export default function AssetsPage() {
@@ -41,14 +65,21 @@ export default function AssetsPage() {
   async function loadAssets() {
     try {
       const authRecord = pb.authStore.model;
-      const records = await pb.collection('assets').getFullList();
+      const records = await pb.collection('assets').getFullList<AssetRecord>();
       const grouped: Record<string, AssetGrouped> = {};
       for (const rec of records) {
-        const groupKey = String((rec as any)?.group_key ?? '');
-        const desc = (rec as any).asset_description || 'Unknown';
-        const key = groupKey || desc;
+        const descRaw = rec.asset_description ?? '';
+        const groupKey = String(rec.group_key ?? descRaw).trim();
+        const desc = descRaw || 'Unknown';
+        const key = groupKey;
         if (!grouped[key]) {
           grouped[key] = { groupKey, description: desc, total: 0, available: 0, borrowed: 0 };
+        }
+        // Fill representative image per group (first available)
+        if (!grouped[key].imageUrl && rec.image) {
+          try {
+            grouped[key].imageUrl = pb.files.getUrl(rec as AssetRecord, rec.image);
+          } catch {}
         }
         grouped[key].total++;
         if (rec.current_holder) {
@@ -63,10 +94,10 @@ export default function AssetsPage() {
         setHoldGroupKeys(new Set());
         return;
       }
-      const held = await pb.collection('assets').getFullList({
+      const held = await pb.collection('assets').getFullList<AssetRecord>({
         filter: `current_holder="${authRecord!.id}"`,
       });
-      setHoldGroupKeys(new Set((held as any[]).map((r) => String(r?.group_key ?? ''))));
+      setHoldGroupKeys(new Set(held.map((r) => String(r.group_key ?? r.asset_description ?? '').trim())));
     } catch (err: unknown) {
       // PocketBase JS SDK may autocancel requests in some dev/runtime situations
       // (ClientResponseError 0). Treat autocancelled requests as "no data".
@@ -140,16 +171,33 @@ export default function AssetsPage() {
       <div className="flex items-center justify-between mb-8">
         <h1 className="text-4xl font-bold text-black dark:text-white">资产总览</h1>
         {mounted && isAdmin && (
-          <Link
-            href="/assets/import"
-            className={
-              "inline-flex items-center justify-center gap-2 rounded-[14px] font-semibold tracking-tight " +
-              "transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-transparent " +
-              "select-none bg-[var(--accent)] text-white hover:brightness-95 active:brightness-90 h-11 px-4 text-[15px]"
-            }
-          >
-            导入资产
-          </Link>
+          <div className="flex items-center gap-3">
+            <Link
+              href="/assets/import"
+              className={
+                "inline-flex items-center justify-center gap-2 rounded-[14px] font-semibold tracking-tight " +
+                "transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-transparent " +
+                "select-none bg-[var(--accent)] text-white hover:brightness-95 active:brightness-90 h-11 px-4 text-[15px]"
+              }
+            >
+              导入资产
+            </Link>
+            <Button
+              variant="primary"
+              size="md"
+              onClick={async () => {
+                try {
+                  const { exportAssetsToExcel } = await import("@/lib/export/assetExport");
+                  await exportAssetsToExcel();
+                } catch (e) {
+                  const msg = e instanceof Error ? e.message : String(e);
+                  alert("导出失败：" + msg);
+                }
+              }}
+            >
+              导出资产
+            </Button>
+          </div>
         )}
       </div>
 
@@ -159,7 +207,7 @@ export default function AssetsPage() {
         <div className="grid gap-6 grid-cols-[repeat(auto-fit,minmax(280px,1fr))]">
           {groups.map((group) => (
             <Card key={group.groupKey || group.description} className="p-0 overflow-hidden flex flex-col">
-              <CardImage className="rounded-none rounded-t-[24px]" />
+              <CardImage src={group.imageUrl} className="rounded-none rounded-t-[24px]" />
               <div className="p-5 flex flex-col gap-3 flex-1">
                 <h2 className="text-lg font-bold text-black dark:text-white">{group.description}</h2>
                 <div className="flex flex-wrap gap-2">

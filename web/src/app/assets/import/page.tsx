@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useRouter } from "next/navigation";
 import { AppShell } from "@/components/AppShell";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/Card";
@@ -20,6 +21,16 @@ export default function AssetImportPage() {
   const [file, setFile] = React.useState<File | null>(null);
   const [notes, setNotes] = React.useState("");
   const [status, setStatus] = React.useState<ImportState>({ state: "idle" });
+  const router = useRouter();
+
+  React.useEffect(() => {
+    if (status.state === "done") {
+      const t = setTimeout(() => {
+        router.replace("/assets");
+      }, 500);
+      return () => clearTimeout(t);
+    }
+  }, [status, router]);
 
   async function onImport() {
     if (!file) return;
@@ -37,6 +48,7 @@ export default function AssetImportPage() {
       setStatus({ state: "parsing", filename: file.name });
       const rows = await parseAssetFile(file);
       const units = rowsToAssetUnits(rows);
+      console.log("Parsed asset units:", units);
       if (!units.length) {
         setStatus({ state: "error", message: "未解析到有效行，请检查表头与内容。" });
         return;
@@ -48,31 +60,21 @@ export default function AssetImportPage() {
       form.append("created_by", pb.authStore.model?.id ?? "");
       if (notes.trim()) form.append("notes", notes.trim());
 
-      const importRec = await pb.collection("asset_imports").create(form);
-
-      const createdAssetIds: string[] = [];
-      try {
-        setStatus({ state: "importing", total: units.length, done: 0 });
-        for (let i = 0; i < units.length; i++) {
-          const unit = units[i]!;
-          const created = await pb.collection("assets").create({
-            ...unit,
-            import_ref: importRec.id,
-          });
-          createdAssetIds.push(created.id);
-          setStatus({ state: "importing", total: units.length, done: i + 1 });
-        }
-      } catch (e: unknown) {
-        // best-effort rollback
-        for (const id of createdAssetIds.reverse()) {
-          try {
-            await pb.collection("assets").delete(id);
-          } catch {}
-        }
-        try {
-          await pb.collection("asset_imports").delete(importRec.id);
-        } catch {}
-        throw e;
+      setStatus({ state: "importing", total: units.length, done: 0 });
+      const res = await fetch("/api/import-xlsx", {
+        method: "POST",
+        body: form,
+        headers: {
+          // Optional: pass current PB token for future auth checks
+          Authorization: pb.authStore.token ? `Bearer ${pb.authStore.token}` : "",
+        },
+      });
+      const json = (await res.json()) as unknown;
+      const ok = typeof json === "object" && json !== null && "ok" in json && (json as { ok?: unknown }).ok === true;
+      if (!res.ok || !ok) {
+        const err =
+          typeof json === "object" && json !== null && "error" in json ? String((json as { error?: unknown }).error ?? "") : "";
+        throw new Error(err || "导入失败（服务器端）。");
       }
 
       setStatus({ state: "done", total: units.length });
@@ -164,6 +166,7 @@ export default function AssetImportPage() {
                 "Metrology Requirement",
                 "Metrology Cost",
                 "Remarks",
+                "Image URL",
               ].map((h) => (
                 <li key={h} className="flex items-center justify-between gap-3">
                   <span className="truncate">{h}</span>
