@@ -98,7 +98,19 @@ export default function RecordsPage() {
       } else {
         setRecords(normalized);
       }
-    } catch (err) {
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      const status = (err as any)?.status;
+      
+      // Treat 404 (collection not found) as empty result
+      if (msg.includes('Missing collection context') || status === 404) {
+        console.warn('lend_records collection not found, showing mock data');
+        const viewerLabel =
+          (authRecord as any)?.username || (authRecord as any)?.email || (authRecord as any)?.id || '我';
+        setRecords(buildMockRecords({ viewerLabel, isAdmin }));
+        return;
+      }
+      
       console.error(err);
     } finally {
       setLoading(false);

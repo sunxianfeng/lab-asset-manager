@@ -99,9 +99,19 @@ export default function AssetsPage() {
       });
       setHoldGroupKeys(new Set(held.map((r) => String(r.group_key ?? r.asset_description ?? '').trim())));
     } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      const status = (err as any)?.status;
+      
+      // Treat 404 (collection not found) as empty result
+      if (msg.includes('Missing collection context') || status === 404) {
+        console.warn('assets collection not found, treating as empty');
+        setGroups([]);
+        setHoldGroupKeys(new Set());
+        return;
+      }
+      
       // PocketBase JS SDK may autocancel requests in some dev/runtime situations
       // (ClientResponseError 0). Treat autocancelled requests as "no data".
-      const msg = err instanceof Error ? err.message : String(err);
       if (msg.includes('autocancel') || msg.includes('ClientResponseError') || msg.includes('request was autocancelled')) {
         console.warn('assets.getFullList autocancelled, treating as empty list');
         setGroups([]);

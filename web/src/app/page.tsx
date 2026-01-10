@@ -97,12 +97,21 @@ export default function Home() {
 
       setGroups(Object.values(grouped));
 
-      if (pb.authStore.isValid && authRecord?.id) {
-        const held = await pb.collection("assets").getFullList({
-          filter: `current_holder="${authRecord.id}"`,
-        });
-        setHoldGroupKeys(new Set((held as any[]).map((r) => String(r?.group_key ?? ""))));
-      } else {
+      try {
+        if (pb.authStore.isValid && authRecord?.id) {
+          const held = await pb.collection("assets").getFullList({
+            filter: `current_holder="${authRecord.id}"`,
+          });
+          setHoldGroupKeys(new Set((held as any[]).map((r) => String(r?.group_key ?? ""))));
+        }
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error("Error fetching held assets:", msg);
+        if ((err as any)?.status === 400) {
+          console.warn("Invalid request. Please check the filter query or collection schema.");
+        } else {
+          console.error("Unexpected error:", err);
+        }
         setHoldGroupKeys(new Set());
       }
     } catch (err: unknown) {

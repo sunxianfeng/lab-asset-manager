@@ -1,0 +1,31 @@
+# PocketBase data directory
+pb_data/
+
+# Process ID files
+.pocketbase.pid
+.nextjs.pid
+
+# Log files
+pocketbase.log
+*.log
+
+# Environment files
+.env
+.env.local
+.env.production
+.env.development
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Backup files
+pb_backups/
+extracted_images/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
