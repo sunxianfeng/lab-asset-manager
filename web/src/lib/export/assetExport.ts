@@ -20,11 +20,30 @@ export interface AssetUnit {
 }
 
 export async function exportAssetsToExcel(): Promise<void> {
-  // Fetch all asset units
-  const records = await pb.collection('assets').getFullList();
+  // Fetch all asset units using pagination to handle large datasets safely
+  let allRecords: any[] = [];
+  let page = 1;
+  const perPage = 500;
+  
+  try {
+    // Fetch records in batches
+    while (true) {
+      const result = await pb.collection('assets').getList(page, perPage);
+      allRecords = allRecords.concat(result.items);
+      
+      // Break if we've fetched all records
+      if (result.items.length < perPage) {
+        break;
+      }
+      page++;
+    }
+  } catch (err) {
+    console.error('Error fetching assets for export:', err);
+    throw new Error('Failed to fetch assets. Please try again.');
+  }
 
   // Transform to Excel-friendly structure
-  const data: AssetUnit[] = records.map((rec) => ({
+  const data: AssetUnit[] = allRecords.map((rec) => ({
     is_fixed_assets: rec.is_fixed_assets || '',
     category: rec.category || '',
     asset_description: rec.asset_description || '',

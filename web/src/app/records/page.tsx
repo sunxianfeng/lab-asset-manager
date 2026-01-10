@@ -84,13 +84,14 @@ export default function RecordsPage() {
   async function loadRecords() {
     try {
       const filter = isAdmin ? '' : `user="${authRecord!.id}"`;
-      const results = await pb.collection('lend_records').getFullList({
+      // Use paginated request with reasonable limit to reduce server load
+      const results = await pb.collection('lend_records').getList(1, 500, {
         filter,
         sort: '-created',
         expand: 'user',
       });
 
-      const normalized = (results as any[]).map(normalizeLendRecord);
+      const normalized = (results.items as any[]).map(normalizeLendRecord);
       if (normalized.length === 0) {
         const viewerLabel =
           (authRecord as any)?.username || (authRecord as any)?.email || (authRecord as any)?.id || '我';

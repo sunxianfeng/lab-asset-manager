@@ -65,9 +65,10 @@ export default function AssetsPage() {
   async function loadAssets() {
     try {
       const authRecord = pb.authStore.model;
-      const records = await pb.collection('assets').getFullList<AssetRecord>();
+      // Use paginated request with reasonable limit to reduce server load
+      const records = await pb.collection('assets').getList<AssetRecord>(1, 500);
       const grouped: Record<string, AssetGrouped> = {};
-      for (const rec of records) {
+      for (const rec of records.items) {
         const descRaw = rec.asset_description ?? '';
         const groupKey = String(rec.group_key ?? descRaw).trim();
         const desc = descRaw || 'Unknown';
@@ -94,10 +95,11 @@ export default function AssetsPage() {
         setHoldGroupKeys(new Set());
         return;
       }
-      const held = await pb.collection('assets').getFullList<AssetRecord>({
-        filter: `current_holder="${authRecord!.id}"`,
+      // Use paginated request to avoid large getFullList loads
+      const held = await pb.collection('assets').getList<AssetRecord>(1, 100, {
+        filter: `current_holder = "${authRecord!.id}"`,
       });
-      setHoldGroupKeys(new Set(held.map((r) => String(r.group_key ?? r.asset_description ?? '').trim())));
+      setHoldGroupKeys(new Set(held.items.map((r) => String(r.group_key ?? r.asset_description ?? '').trim())));
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       const status = (err as any)?.status;

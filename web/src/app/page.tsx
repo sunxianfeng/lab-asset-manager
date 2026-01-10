@@ -75,7 +75,9 @@ export default function Home() {
   async function loadAssets() {
     setLoading(true);
     try {
-      const records = await pb.collection("assets").getFullList();
+      // Use paginated request with reasonable limit to reduce server load
+      const result = await pb.collection("assets").getList(1, 500);
+      const records = result.items;
       const grouped: Record<string, AssetGrouped> = {};
 
       for (const rec of records as any[]) {
@@ -99,19 +101,30 @@ export default function Home() {
 
       try {
         if (pb.authStore.isValid && authRecord?.id) {
-          const held = await pb.collection("assets").getFullList({
-            filter: `current_holder="${authRecord.id}"`,
+          // use paginated request to avoid large getFullList loads and reduce server pressure
+          const res = await pb.collection("assets").getList(1, 100, {
+            filter: `current_holder = "${authRecord.id}"`,
           });
+          const held = res.items ?? [];
           setHoldGroupKeys(new Set((held as any[]).map((r) => String(r?.group_key ?? ""))));
         }
       } catch (err: unknown) {
+        // log full error for debugging
+        console.error("Error fetching held assets (full):", err);
+        try {
+          console.error("Serialized error:", JSON.stringify(err, Object.getOwnPropertyNames(err)));
+        } catch {}
+
         const msg = err instanceof Error ? err.message : String(err);
         console.error("Error fetching held assets:", msg);
         if ((err as any)?.status === 400) {
           console.warn("Invalid request. Please check the filter query or collection schema.");
+        } else if ((err as any)?.status >= 500) {
+          console.warn("Server error when fetching held assets. Check PocketBase server logs.");
         } else {
           console.error("Unexpected error:", err);
         }
+
         setHoldGroupKeys(new Set());
       }
     } catch (err: unknown) {
