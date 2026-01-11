@@ -20,7 +20,17 @@ type ImportState =
 export default function AssetImportPage() {
   const [file, setFile] = React.useState<File | null>(null);
   const [status, setStatus] = React.useState<ImportState>({ state: "idle" });
+  const [isAdmin, setIsAdmin] = React.useState<boolean | null>(null);
   const router = useRouter();
+
+  React.useEffect(() => {
+    // Check if user is logged in and is admin
+    const authModel = pb.authStore.model;
+    console.log('Auth model:', authModel); // Debug log
+    const isUserAdmin = pb.authStore.isValid && authModel?.role === "admin";
+    console.log('Is admin:', isUserAdmin, 'Role:', authModel?.role); // Debug log
+    setIsAdmin(isUserAdmin);
+  }, []);
 
   React.useEffect(() => {
     if (status.state === "done") {
@@ -34,7 +44,7 @@ export default function AssetImportPage() {
   async function onImport() {
     if (!file) return;
     if (!pb.authStore.isValid) {
-      setStatus({ state: "error", message: "请先登录（需要 admin 权限）。" });
+      router.push("/auth/login");
       return;
     }
 
@@ -101,80 +111,105 @@ export default function AssetImportPage() {
 
   return (
     <AppShell title="资产导入">
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-5">
-        <Card className="lg:col-span-3">
+      {isAdmin === null ? (
+        <Card>
           <CardHeader>
-            <div>
-              <CardTitle>导入 Excel / CSV</CardTitle>
-              <CardDescription className="mt-1">
-                仅 admin 可用。系统会保存导入文件，并把每一行写入为一个资产 unit。
-              </CardDescription>
-            </div>
+            <CardTitle>加载中...</CardTitle>
+            <CardDescription className="mt-1">
+              正在验证权限，请稍候。
+            </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <div className="text-sm font-semibold tracking-tight">文件</div>
-              <input
-                id="file-input"
-                className="hidden"
-                type="file"
-                accept=".csv,.xls,.xlsx"
-                onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-              />
-              <label htmlFor="file-input" className="block">
-                <Button
-                  type="button"
-                  onClick={() => document.getElementById("file-input")?.click()}
-                  className="w-full"
-                >
-                  {file ? `已选择: ${file.name}` : "选择文件"}
-                </Button>
-              </label>
-            </div>
-
-            <div className="flex items-center justify-between gap-3">
-              <div className="text-sm text-[var(--app-muted)]">{hint}</div>
-              <Button
-                onClick={onImport}
-                disabled={!file || status.state === "parsing" || status.state === "uploading" || status.state === "importing"}
-              >
-                开始导入
-              </Button>
-            </div>
-          </CardContent>
         </Card>
-
-        <Card className="lg:col-span-2">
+      ) : isAdmin === false ? (
+        <Card>
           <CardHeader>
-            <CardTitle>表头要求</CardTitle>
-            <CardDescription className="mt-1">导入会按以下列名映射字段。</CardDescription>
+            <CardTitle>权限不足</CardTitle>
+            <CardDescription className="mt-1">
+              仅 admin 可以导入资产。请先登录或切换到 admin 账户。
+            </CardDescription>
           </CardHeader>
           <CardContent>
-            <ul className="space-y-2 text-sm text-[var(--app-muted)]">
-              {[
-                "Is Fixed Assets",
-                "Category",
-                "Asset description",
-                "Serial No",
-                "location",
-                "user",
-                "Manufacturer",
-                "Value (CNY)",
-                "Commissioning Time",
-                "Metrology Validity Period",
-                "Metrology Requirement",
-                "Metrology Cost",
-                "Remarks",
-                "Image URL",
-              ].map((h) => (
-                <li key={h} className="flex items-center justify-between gap-3">
-                  <span className="truncate">{h}</span>
-                </li>
-              ))}
-            </ul>
+            <Button onClick={() => router.push("/auth/login")}>
+              前往登录
+            </Button>
           </CardContent>
         </Card>
-      </div>
+      ) : (
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-5">
+          <Card className="lg:col-span-3">
+            <CardHeader>
+              <div>
+                <CardTitle>导入 Excel / CSV</CardTitle>
+                <CardDescription className="mt-1">
+                  仅 admin 可用。系统会保存导入文件，并把每一行写入为一个资产 unit。
+                </CardDescription>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <div className="text-sm font-semibold tracking-tight">文件</div>
+                <input
+                  id="file-input"
+                  className="hidden"
+                  type="file"
+                  accept=".csv,.xls,.xlsx"
+                  onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+                />
+                <label htmlFor="file-input" className="block">
+                  <Button
+                    type="button"
+                    onClick={() => document.getElementById("file-input")?.click()}
+                    className="w-full"
+                  >
+                    {file ? `已选择: ${file.name}` : "选择文件"}
+                  </Button>
+                </label>
+              </div>
+
+              <div className="flex items-center justify-between gap-3">
+                <div className="text-sm text-[var(--app-muted)]">{hint}</div>
+                <Button
+                  onClick={onImport}
+                  disabled={!file || status.state === "parsing" || status.state === "uploading" || status.state === "importing"}
+                >
+                  开始导入
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="lg:col-span-2">
+            <CardHeader>
+              <CardTitle>表头要求</CardTitle>
+              <CardDescription className="mt-1">导入会按以下列名映射字段。</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ul className="space-y-2 text-sm text-[var(--app-muted)]">
+                {[
+                  "Is Fixed Assets",
+                  "Category",
+                  "Asset description",
+                  "Serial No",
+                  "location",
+                  "user",
+                  "Manufacturer",
+                  "Value (CNY)",
+                  "Commissioning Time",
+                  "Metrology Validity Period",
+                  "Metrology Requirement",
+                  "Metrology Cost",
+                  "Remarks",
+                  "Image URL",
+                ].map((h) => (
+                  <li key={h} className="flex items-center justify-between gap-3">
+                    <span className="truncate">{h}</span>
+                  </li>
+                ))}
+              </ul>
+            </CardContent>
+          </Card>
+        </div>
+      )}
     </AppShell>
   );
 }

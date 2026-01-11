@@ -271,6 +271,9 @@ export async function POST(req: Request) {
 
     const pb = await getPbAdmin();
 
+    const createdIds: string[] = [];
+    const warnings: string[] = [];
+
     // Create asset_imports (best-effort)
     let importRecId: string | undefined;
     try {
@@ -280,16 +283,27 @@ export async function POST(req: Request) {
       if (notes) importFd.append("notes", notes);
       const rec = await pb.collection("asset_imports").create(importFd);
       importRecId = rec.id;
-    } catch {
-      // ignore if collection/fields not present
+      console.log("✅ Created asset_imports record with ID:", importRecId);
+    } catch (e) {
+      // Log error for debugging, but continue with import
+      const errorMsg = e instanceof Error ? e.message : String(e);
+      console.error("❌ Failed to create asset_imports record:", errorMsg);
+      warnings.push(`Asset imports record creation failed: ${errorMsg}`);
     }
 
-    const createdIds: string[] = [];
-    const warnings: string[] = [];
+    console.log("📋 importRecId before asset creation loop:", importRecId);
 
     for (const { unit, sourceRowIndex } of unitsWithRow) {
       const fd = new FormData();
-      if (importRecId) fd.append("import_ref", importRecId);
+      if (importRecId) {
+        console.log(`📌 Adding import_ref=${importRecId} to asset row ${sourceRowIndex}`);
+        // Try both possible field names (in case of typo in schema)
+        fd.append("import_ref", importRecId);
+        // Also append as import_reff in case that's the actual field name
+        fd.append("import_reff", importRecId);
+      } else {
+        console.log(`⚠️  No importRecId for asset row ${sourceRowIndex}`);
+      }
 
       // append unit fields (except image_url; we use it only as fallback)
       for (const [k, v] of Object.entries(unit)) {
@@ -318,7 +332,11 @@ export async function POST(req: Request) {
         }
       }
 
+      // Debug: log FormData contents before creating
+      console.log(`🔍 FormData entries for row ${sourceRowIndex}:`, Array.from(fd.entries()).map(([k, v]) => [k, v instanceof Blob ? `<Blob: ${(v as Blob).type}>` : v]));
+
       const created = await pb.collection("assets").create(fd);
+      console.log(`✅ Created asset ${sourceRowIndex} with ID: ${created.id}, import_ref field:`, created.import_ref);
       createdIds.push(created.id);
     }
 
