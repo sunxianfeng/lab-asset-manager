@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/Input';
 import { Card } from '@/components/ui/Card';
 
 export default function LoginPage() {
-  const [username, setUsername] = useState('');
+  const [identity, setIdentity] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -20,10 +20,11 @@ export default function LoginPage() {
     setError('');
     setLoading(true);
     try {
-      await pb.collection('users').authWithPassword(username, password);
+      // PocketBase authWithPassword accepts email or username as identity
+      await pb.collection('users').authWithPassword(identity, password);
       router.push('/assets');
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : '登录失败');
+      setError(err instanceof Error ? err.message : '登录失败，请检查邮箱/用户名和密码');
     } finally {
       setLoading(false);
     }
@@ -36,9 +37,9 @@ export default function LoginPage() {
         <form onSubmit={handleLogin} className="flex flex-col gap-4">
           <Input
             type="text"
-            placeholder="用户名"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
+            placeholder="邮箱或用户名"
+            value={identity}
+            onChange={(e) => setIdentity(e.target.value)}
             required
           />
           <Input

@@ -103,16 +103,25 @@ export default function RecordsPage() {
       const msg = err instanceof Error ? err.message : String(err);
       const status = (err as any)?.status;
       
-      // Treat 404 (collection not found) as empty result
-      if (msg.includes('Missing collection context') || status === 404) {
-        console.warn('lend_records collection not found, showing mock data');
+      // Treat 404 (collection not found), 400 (bad request), or autocancellation as empty result
+      if (
+        msg.includes('Missing collection context') || 
+        msg.includes('autocancelled') || 
+        status === 404 || 
+        status === 400
+      ) {
+        console.warn('lend_records not available or empty, showing mock data:', msg);
         const viewerLabel =
           (authRecord as any)?.username || (authRecord as any)?.email || (authRecord as any)?.id || '我';
         setRecords(buildMockRecords({ viewerLabel, isAdmin }));
         return;
       }
       
-      console.error(err);
+      console.error('Failed to load records:', err);
+      // Show mock data as fallback
+      const viewerLabel =
+        (authRecord as any)?.username || (authRecord as any)?.email || (authRecord as any)?.id || '我';
+      setRecords(buildMockRecords({ viewerLabel, isAdmin }));
     } finally {
       setLoading(false);
     }

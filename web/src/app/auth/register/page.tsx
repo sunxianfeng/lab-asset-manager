@@ -55,7 +55,8 @@ export default function RegisterPage() {
       });
 
       // Automatically log in after registration
-      await pb.collection('users').authWithPassword(username, password);
+      // Use the email as the identity for authentication (PocketBase default)
+      await pb.collection('users').authWithPassword(email, password);
       
       // Redirect to assets page
       router.push('/assets');
