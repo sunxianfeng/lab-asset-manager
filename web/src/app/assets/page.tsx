@@ -180,12 +180,31 @@ export default function AssetsPage() {
         router.push('/auth/login');
         return;
       }
+
+      // 1. Find an available asset in this group to borrow
+      const availableAsset = await pb.collection('assets').getFirstListItem<AssetRecord>(
+        `(group_key = "${params.groupKey}" || asset_description = "${params.description}") && current_holder = ""`,
+        { requestKey: `find-available-asset-${params.groupKey}` }
+      );
+
+      if (!availableAsset) {
+        alert('没有可借出的资产');
+        return;
+      }
+
+      // 2. Update the asset to mark it as borrowed by current user
+      await pb.collection('assets').update(availableAsset.id, {
+        current_holder: authRecord!.id,
+      });
+
+      // 3. Create a lend record in the history
       await pb.collection('lend_records').create({
         user: authRecord!.id,
         asset_group_key: params.groupKey,
         asset_description: params.description,
         action: 'lend',
       });
+
       loadAssets(); // Refresh
 
       // Trigger door open if connected
@@ -193,16 +212,17 @@ export default function AssetsPage() {
         const { openDoor, isConnected } = await import('@/lib/door/doorController');
         if (await isConnected()) {
           await openDoor();
-          alert('Borrow successful! Cabinet door opened.');
+          alert('借出成功！柜门已打开');
         } else {
-          alert('Borrow successful! (Door controller not connected)');
+          alert('借出成功！（未连接门控）');
         }
       } catch (doorErr) {
         console.warn('Door open failed:', doorErr);
-        alert('Borrow successful, but door open failed. Check the kiosk connection.');
+        alert('借出成功，但门控打开失败。请检查设备连接');
       }
     } catch (err: unknown) {
-      alert('Borrow failed: ' + (err instanceof Error ? err.message : ''));
+      const msg = err instanceof Error ? err.message : String(err);
+      alert('借出失败: ' + msg);
     }
   }
 
@@ -214,15 +234,36 @@ export default function AssetsPage() {
         router.push('/auth/login');
         return;
       }
+
+      // 1. Find the asset currently held by this user
+      const heldAsset = await pb.collection('assets').getFirstListItem<AssetRecord>(
+        `(group_key = "${params.groupKey}" || asset_description = "${params.description}") && current_holder = "${authRecord.id}"`,
+        { requestKey: `find-held-asset-${params.groupKey}` }
+      );
+
+      if (!heldAsset) {
+        alert('未找到您借出的资产');
+        return;
+      }
+
+      // 2. Create a return record in the history
       await pb.collection('lend_records').create({
         user: authRecord!.id,
         asset_group_key: params.groupKey,
         asset_description: params.description,
         action: 'return',
       });
+
+      // 3. Update the asset to mark it as available
+      await pb.collection('assets').update(heldAsset.id, {
+        current_holder: '',
+      });
+
       loadAssets(); // Refresh
+      alert('归还成功！');
     } catch (err: unknown) {
-      alert('Return failed: ' + (err instanceof Error ? err.message : ''));
+      const msg = err instanceof Error ? err.message : String(err);
+      alert('归还失败: ' + msg);
     }
   }
 
