@@ -102,11 +102,36 @@ export default function Home() {
       try {
         if (pb.authStore.isValid && authRecord?.id) {
           // use paginated request to avoid large getFullList loads and reduce server pressure
-          const res = await pb.collection("assets").getList(1, 100, {
-            filter: `current_holder = "${authRecord.id}"`,
-          });
-          const held = res.items ?? [];
-          setHoldGroupKeys(new Set((held as any[]).map((r) => String(r?.group_key ?? ""))));
+          // Try to fetch assets where current_holder matches the authenticated user
+          // If the field doesn't exist or has issues, catch and continue
+          try {
+            const res = await pb.collection("assets").getList(1, 100, {
+              filter: `current_holder = "${authRecord.id}"`,
+            });
+            const held = res.items ?? [];
+            setHoldGroupKeys(new Set((held as any[]).map((r) => String(r?.group_key ?? ""))));
+          } catch (filterErr: unknown) {
+            // If filtering by current_holder fails, try alternative syntax
+            console.warn("First filter attempt failed, trying alternative syntax...");
+            try {
+              const res = await pb.collection("assets").getList(1, 100, {
+                filter: `current_holder.id = "${authRecord.id}"`,
+              });
+              const held = res.items ?? [];
+              setHoldGroupKeys(new Set((held as any[]).map((r) => String(r?.group_key ?? ""))));
+            } catch (altErr: unknown) {
+              // If both syntaxes fail, fetch all and filter client-side
+              console.warn("Alternative filter failed, falling back to client-side filtering");
+              const allRes = await pb.collection("assets").getList(1, 500);
+              const held = (allRes.items ?? []).filter((item: any) => 
+                item?.current_holder === authRecord.id || item?.current_holder?.id === authRecord.id
+              );
+              setHoldGroupKeys(new Set((held as any[]).map((r) => String(r?.group_key ?? ""))));
+            }
+          }
+        } else {
+          // If no valid auth, set empty hold keys
+          setHoldGroupKeys(new Set());
         }
       } catch (err: unknown) {
         // log full error for debugging
@@ -118,7 +143,10 @@ export default function Home() {
         const msg = err instanceof Error ? err.message : String(err);
         console.error("Error fetching held assets:", msg);
         if ((err as any)?.status === 400) {
-          console.warn("Invalid request. Please check the filter query or collection schema.");
+          console.warn("Invalid filter query for current_holder. Possible issues:");
+          console.warn("1. Field name mismatch - check PocketBase collection schema");
+          console.warn("2. Invalid user ID format");
+          console.warn("3. Relation field syntax issue");
         } else if ((err as any)?.status >= 500) {
           console.warn("Server error when fetching held assets. Check PocketBase server logs.");
         } else {

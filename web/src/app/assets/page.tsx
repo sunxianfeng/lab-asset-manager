@@ -55,18 +55,19 @@ export default function AssetsPage() {
   }, []);
 
   useEffect(() => {
-    if (!pb.authStore.isValid) {
-      router.push('/auth/login');
-      return;
-    }
+    // Load assets regardless of auth status
     loadAssets();
   }, [router]);
 
   async function loadAssets() {
     try {
       const authRecord = pb.authStore.model;
+      // Fetch assets without authentication requirement
       // Use paginated request with reasonable limit to reduce server load
-      const records = await pb.collection('assets').getList<AssetRecord>(1, 500);
+      // Use unique requestKey to prevent auto-cancellation
+      const records = await pb.collection('assets').getList<AssetRecord>(1, 500, {
+        requestKey: 'assets-list-all',
+      });
       const grouped: Record<string, AssetGrouped> = {};
       for (const rec of records.items) {
         const descRaw = rec.asset_description ?? '';
@@ -95,11 +96,48 @@ export default function AssetsPage() {
         setHoldGroupKeys(new Set());
         return;
       }
-      // Use paginated request to avoid large getFullList loads
-      const held = await pb.collection('assets').getList<AssetRecord>(1, 100, {
-        filter: `current_holder = "${authRecord!.id}"`,
-      });
-      setHoldGroupKeys(new Set(held.items.map((r) => String(r.group_key ?? r.asset_description ?? '').trim())));
+      
+      try {
+        // Use paginated request to avoid large getFullList loads
+        // Try multiple filter syntaxes as PocketBase relation filters can be sensitive
+        try {
+          const held = await pb.collection('assets').getList<AssetRecord>(1, 100, {
+            filter: `current_holder = "${authRecord.id}"`,
+            requestKey: 'assets-held-by-user-1',
+          });
+          setHoldGroupKeys(new Set(held.items.map((r) => String(r.group_key ?? r.asset_description ?? '').trim())));
+        } catch (filterErr: unknown) {
+          console.warn("First filter syntax failed, trying alternative...");
+          try {
+            const held = await pb.collection('assets').getList<AssetRecord>(1, 100, {
+              filter: `current_holder.id = "${authRecord.id}"`,
+              requestKey: 'assets-held-by-user-2',
+            });
+            setHoldGroupKeys(new Set(held.items.map((r) => String(r.group_key ?? r.asset_description ?? '').trim())));
+          } catch (altErr: unknown) {
+            console.warn("Alternative filter failed, falling back to client-side filtering");
+            const allRes = await pb.collection('assets').getList<AssetRecord>(1, 500, {
+              requestKey: 'assets-held-fallback',
+            });
+            const held = allRes.items.filter((item) => 
+              item.current_holder === authRecord.id || (item.current_holder as any)?.id === authRecord.id
+            );
+            setHoldGroupKeys(new Set(held.map((r) => String(r.group_key ?? r.asset_description ?? '').trim())));
+          }
+        }
+      } catch (holdErr: unknown) {
+        // Log the error but don't fail the entire load
+        console.error('Error fetching held assets:', holdErr);
+        const holdMsg = holdErr instanceof Error ? holdErr.message : String(holdErr);
+        const holdStatus = (holdErr as any)?.status;
+        
+        if (holdStatus === 400) {
+          console.warn('Invalid filter query for current_holder. Check collection schema or field name.');
+        }
+        
+        // Set empty hold keys and continue
+        setHoldGroupKeys(new Set());
+      }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       const status = (err as any)?.status;
@@ -129,7 +167,8 @@ export default function AssetsPage() {
   async function handleBorrow(params: { groupKey: string; description: string }) {
     try {
       const authRecord = pb.authStore.model;
-      if (!authRecord?.id) {
+      if (!authRecord?.id || !pb.authStore.isValid) {
+        alert('请先登录后再借出资产');
         router.push('/auth/login');
         return;
       }
@@ -162,7 +201,8 @@ export default function AssetsPage() {
   async function handleReturn(params: { groupKey: string; description: string }) {
     try {
       const authRecord = pb.authStore.model;
-      if (!authRecord?.id) {
+      if (!authRecord?.id || !pb.authStore.isValid) {
+        alert('请先登录后再归还资产');
         router.push('/auth/login');
         return;
       }
