@@ -297,10 +297,7 @@ export async function POST(req: Request) {
       const fd = new FormData();
       if (importRecId) {
         console.log(`📌 Adding import_ref=${importRecId} to asset row ${sourceRowIndex}`);
-        // Try both possible field names (in case of typo in schema)
         fd.append("import_ref", importRecId);
-        // Also append as import_reff in case that's the actual field name
-        fd.append("import_reff", importRecId);
       } else {
         console.log(`⚠️  No importRecId for asset row ${sourceRowIndex}`);
       }
