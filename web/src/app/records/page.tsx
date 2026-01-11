@@ -14,55 +14,14 @@ interface LendRecord {
 }
 
 function normalizeLendRecord(rec: any): LendRecord {
-  const userValue =
-    typeof rec?.user === 'string'
-      ? rec.user
-      : rec?.expand?.user?.username || rec?.expand?.user?.email || '未知用户';
-
+  // The user field is now text (stores email directly)
   return {
     id: String(rec?.id ?? ''),
-    user: String(userValue ?? ''),
+    user: String(rec?.user ?? '未知用户'),
     asset_description: String(rec?.asset_description ?? ''),
     action: rec?.action === 'return' ? 'return' : 'lend',
     created: String(rec?.created ?? new Date().toISOString()),
   };
-}
-
-function buildMockRecords(params: { viewerLabel: string; isAdmin: boolean }): LendRecord[] {
-  const now = Date.now();
-  const make = (
-    i: number,
-    data: Pick<LendRecord, 'user' | 'asset_description' | 'action'> & { createdOffsetMs: number },
-  ): LendRecord => ({
-    id: `mock-${i}`,
-    user: data.user,
-    asset_description: data.asset_description,
-    action: data.action,
-    created: new Date(now - data.createdOffsetMs).toISOString(),
-  });
-
-  // If not admin, keep the mock rows scoped to the current viewer.
-  const u = params.viewerLabel || '我';
-  return [
-    make(1, {
-      user: params.isAdmin ? '测试用户A' : u,
-      asset_description: '示波器（测试数据）',
-      action: 'lend',
-      createdOffsetMs: 60 * 60 * 1000,
-    }),
-    make(2, {
-      user: params.isAdmin ? '测试用户A' : u,
-      asset_description: '万用表（测试数据）',
-      action: 'return',
-      createdOffsetMs: 2 * 60 * 60 * 1000,
-    }),
-    make(3, {
-      user: params.isAdmin ? '测试用户B' : u,
-      asset_description: '电源（测试数据）',
-      action: 'lend',
-      createdOffsetMs: 24 * 60 * 60 * 1000,
-    }),
-  ];
 }
 
 export default function RecordsPage() {
@@ -77,55 +36,64 @@ export default function RecordsPage() {
       router.push('/auth/login');
       return;
     }
-    loadRecords();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [router, isAdmin]);
+    
+    // Use a flag to prevent state updates after unmount
+    let cancelled = false;
+    
+    async function loadRecords() {
+      try {
+        // Disable auto-cancellation for this request
+        const allResults = await pb.collection('lend_records').getList(1, 500, {
+          sort: '-created',
+          requestKey: null, // Disable auto-cancellation completely
+        });
+        
+        if (cancelled) return;
+        
+        let results;
+        if (isAdmin) {
+          results = allResults;
+        } else {
+          const userEmail = (authRecord as any)?.email;
+          if (!userEmail) {
+            setRecords([]);
+            setLoading(false);
+            return;
+          }
+          results = {
+            ...allResults,
+            items: allResults.items.filter((item: any) => item.user === userEmail),
+          };
+        }
 
-  async function loadRecords() {
-    try {
-      const filter = isAdmin ? '' : `user="${authRecord!.id}"`;
-      // Use paginated request with reasonable limit to reduce server load
-      const results = await pb.collection('lend_records').getList(1, 500, {
-        filter,
-        sort: '-created',
-        expand: 'user',
-      });
-
-      const normalized = (results.items as any[]).map(normalizeLendRecord);
-      if (normalized.length === 0) {
-        const viewerLabel =
-          (authRecord as any)?.username || (authRecord as any)?.email || (authRecord as any)?.id || '我';
-        setRecords(buildMockRecords({ viewerLabel, isAdmin }));
-      } else {
+        const normalized = (results.items as any[]).map(normalizeLendRecord);
         setRecords(normalized);
+        console.log(`Loaded ${normalized.length} records`);
+      } catch (err: unknown) {
+        if (cancelled) return;
+        
+        const msg = err instanceof Error ? err.message : String(err);
+        const status = (err as any)?.status;
+        
+        // Only log non-trivial errors
+        if (!msg.includes('autocancelled') && status !== 0) {
+          console.error('Failed to fetch lend_records:', { message: msg, status });
+        }
+        
+        setRecords([]);
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
       }
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      const status = (err as any)?.status;
-      
-      // Treat 404 (collection not found), 400 (bad request), or autocancellation as empty result
-      if (
-        msg.includes('Missing collection context') || 
-        msg.includes('autocancelled') || 
-        status === 404 || 
-        status === 400
-      ) {
-        console.warn('lend_records not available or empty, showing mock data:', msg);
-        const viewerLabel =
-          (authRecord as any)?.username || (authRecord as any)?.email || (authRecord as any)?.id || '我';
-        setRecords(buildMockRecords({ viewerLabel, isAdmin }));
-        return;
-      }
-      
-      console.error('Failed to load records:', err);
-      // Show mock data as fallback
-      const viewerLabel =
-        (authRecord as any)?.username || (authRecord as any)?.email || (authRecord as any)?.id || '我';
-      setRecords(buildMockRecords({ viewerLabel, isAdmin }));
-    } finally {
-      setLoading(false);
     }
-  }
+    
+    loadRecords();
+    
+    return () => {
+      cancelled = true;
+    };
+  }, [router, authRecord?.id, isAdmin]);
 
   return (
     <AppShell>
@@ -133,6 +101,10 @@ export default function RecordsPage() {
 
       {loading ? (
         <p>加载中...</p>
+      ) : records.length === 0 ? (
+        <div className="bg-white/60 backdrop-blur-[20px] rounded-3xl p-6 text-center text-gray-500">
+          <p>暂无借还记录</p>
+        </div>
       ) : (
         <div className="bg-white/60 backdrop-blur-[20px] rounded-3xl p-6">
           <table className="w-full">

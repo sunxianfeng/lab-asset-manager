@@ -199,7 +199,7 @@ export default function AssetsPage() {
 
       // 3. Create a lend record in the history
       await pb.collection('lend_records').create({
-        user: authRecord!.id,
+        user: (authRecord as any)?.email || authRecord!.id, // Store email (text field)
         asset_group_key: params.groupKey,
         asset_description: params.description,
         action: 'lend',
@@ -222,6 +222,9 @@ export default function AssetsPage() {
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
+      const status = (err as any)?.status;
+      const errorData = (err as any)?.data;
+      console.error('Borrow error details:', { message: msg, status, data: errorData });
       alert('借出失败: ' + msg);
     }
   }
@@ -248,7 +251,7 @@ export default function AssetsPage() {
 
       // 2. Create a return record in the history
       await pb.collection('lend_records').create({
-        user: authRecord!.id,
+        user: (authRecord as any)?.email || authRecord!.id, // Store email (text field)
         asset_group_key: params.groupKey,
         asset_description: params.description,
         action: 'return',
@@ -263,6 +266,9 @@ export default function AssetsPage() {
       alert('归还成功！');
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
+      const status = (err as any)?.status;
+      const errorData = (err as any)?.data;
+      console.error('Return error details:', { message: msg, status, data: errorData });
       alert('归还失败: ' + msg);
     }
   }
