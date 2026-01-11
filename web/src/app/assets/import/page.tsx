@@ -19,7 +19,6 @@ type ImportState =
 
 export default function AssetImportPage() {
   const [file, setFile] = React.useState<File | null>(null);
-  const [notes, setNotes] = React.useState("");
   const [status, setStatus] = React.useState<ImportState>({ state: "idle" });
   const router = useRouter();
 
@@ -58,7 +57,6 @@ export default function AssetImportPage() {
       const form = new FormData();
       form.append("source_file", file);
       form.append("created_by", pb.authStore.model?.id ?? "");
-      if (notes.trim()) form.append("notes", notes.trim());
 
       setStatus({ state: "importing", total: units.length, done: 0 });
       const res = await fetch("/api/import-xlsx", {
@@ -117,20 +115,21 @@ export default function AssetImportPage() {
             <div className="space-y-2">
               <div className="text-sm font-semibold tracking-tight">文件</div>
               <input
-                className="block w-full text-sm"
+                id="file-input"
+                className="hidden"
                 type="file"
                 accept=".csv,.xls,.xlsx"
                 onChange={(e) => setFile(e.target.files?.[0] ?? null)}
               />
-            </div>
-
-            <div className="space-y-2">
-              <div className="text-sm font-semibold tracking-tight">备注（可选）</div>
-              <Input
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                placeholder="例如：2026-01 盘点导入"
-              />
+              <label htmlFor="file-input" className="block">
+                <Button
+                  type="button"
+                  onClick={() => document.getElementById("file-input")?.click()}
+                  className="w-full"
+                >
+                  {file ? `已选择: ${file.name}` : "选择文件"}
+                </Button>
+              </label>
             </div>
 
             <div className="flex items-center justify-between gap-3">
