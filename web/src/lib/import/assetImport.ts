@@ -73,8 +73,8 @@ function asBool(v: unknown) {
   if (typeof v === "boolean") return v;
   const s = asString(v)?.toLowerCase();
   if (!s) return undefined;
-  if (["y", "yes", "true", "1", "固定资产"].includes(s)) return true;
-  if (["n", "no", "false", "0", "非固定资产"].includes(s)) return false;
+  if (["y", "yes", "true", "1", "固定资产", "固资"].includes(s)) return true;
+  if (["n", "no", "false", "0", "非固定资产", "非固资"].includes(s)) return false;
   return undefined;
 }
 
