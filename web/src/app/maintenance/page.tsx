@@ -26,9 +26,20 @@ export default function MaintenancePage() {
     const loadAssets = async () => {
       try {
         const records = await pb.collection('assets').getFullList<Asset>();
-        setAssets(records);
+        setAssets(records ?? []);
       } catch (error) {
-        console.error('Failed to load assets:', error);
+        // PocketBase js-sdk may autocancel requests (ClientResponseError 0).
+        // Treat autocancel or empty-list conditions as an empty assets list
+        // so the UI doesn't show an error when there are simply no records or
+        // the request was cancelled by the SDK for navigation changes.
+        const msg = (error as any)?.message || String(error);
+        const isAutoCancelled = msg.includes('autocancelled') || (error as any)?.code === 0;
+        if (isAutoCancelled) {
+          console.info('PocketBase request autocancelled; using empty assets list.');
+          setAssets([]);
+        } else {
+          console.error('Failed to load assets:', error);
+        }
       }
     };
     loadAssets();

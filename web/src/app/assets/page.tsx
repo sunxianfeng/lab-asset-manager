@@ -20,6 +20,84 @@ function getErrorField(e: unknown, key: string): unknown {
   return e[key];
 }
 
+function formatErrorDetails(e: unknown) {
+  const message = e instanceof Error ? e.message : String(e);
+  let status: number | undefined = undefined;
+  let data: unknown = undefined;
+
+  if (isRecord(e)) {
+    // Common shapes from PocketBase / fetch errors
+    const r = e as Record<string, unknown>;
+    const statusCandidate = r['status'] ?? r['statusCode'] ?? (isRecord(r['response']) ? (r['response'] as Record<string, unknown>)['status'] : undefined);
+    if (typeof statusCandidate === 'number') status = statusCandidate;
+
+    const dataCandidate = r['data'] ?? (isRecord(r['response']) ? (r['response'] as Record<string, unknown>)['data'] : undefined) ?? r['response'] ?? r['body'];
+    data = dataCandidate;
+  } else {
+    // Try to parse JSON payload from message text (fallback for Error created from JSON)
+    try {
+      const jsonMatch = String(message).match(/\{[\s\S]*\}$/);
+      if (jsonMatch) data = JSON.parse(jsonMatch[0]);
+    } catch {}
+  }
+
+  return { message, status, data, raw: e };
+}
+
+/**
+ * Escape user-supplied values inserted into PocketBase filter strings.
+ * Safest approach: escape backslashes and double-quotes, and strip newlines.
+ */
+function escapeFilterValue(v: unknown): string {
+  let s = String(v ?? '');
+  // Normalize whitespace (convert newlines/tabs to spaces), collapse multiple spaces, trim
+  s = s.replace(/[\u0000-\u001F\u007F]+/g, ' ').replace(/\s+/g, ' ').trim();
+
+  // Escape backslashes first, then double quotes
+  s = s.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+
+  // Escape additional characters that can break filter grammar: parentheses, pipes, ampersand, semicolon, angle brackets, question/star
+  s = s.replace(/[()|&;<>?*]/g, (m) => `\\${m}`);
+
+  // Limit length to avoid extremely long filters (server may reject or slow down)
+  const MAX_LEN = 300;
+  if (s.length > MAX_LEN) s = s.slice(0, MAX_LEN);
+
+  return s;
+}
+
+/**
+ * Extract human-friendly validation message from PocketBase error details.
+ */
+function getFriendlyErrorMessage(details: { message: string; status?: number; data?: unknown } | null): string {
+  if (!details) return 'Something went wrong while processing your request.';
+  // If structured data is present, try to summarize
+  const d = details.data;
+  if (isRecord(d)) {
+    try {
+      const r = d as Record<string, unknown>;
+      const parts: string[] = [];
+      for (const k of Object.keys(r)) {
+        const v = r[k];
+        if (Array.isArray(v)) {
+          parts.push(`${k}: ${v.join('; ')}`);
+        } else if (typeof v === 'string') {
+          parts.push(`${k}: ${v}`);
+        } else if (isRecord(v) && typeof (v as Record<string, unknown>)['message'] === 'string') {
+          parts.push(`${k}: ${(v as Record<string, unknown>)['message']}`);
+        } else {
+          parts.push(`${k}: ${JSON.stringify(v)}`);
+        }
+      }
+      if (parts.length > 0) return parts.join(' | ');
+    } catch {}
+  }
+
+  // Fallback to top-level message
+  if (details.message) return details.message;
+  return 'Something went wrong while processing your request.';
+}
+
 function holderMatchesId(holder: unknown, id: string): boolean {
   if (!id) return false;
   if (holder === id) return true;
@@ -168,15 +246,15 @@ export default function AssetsPage() {
         // Try multiple filter syntaxes as PocketBase relation filters can be sensitive
         try {
           const held = await pb.collection('assets').getList<AssetRecord>(1, 100, {
-            filter: `current_holder = "${authRecord.id}" && scrapped != true`,
+            filter: `current_holder = "${escapeFilterValue(authRecord.id)}" && scrapped != true`,
             requestKey: 'assets-held-by-user-1',
           });
           setHoldGroupKeys(new Set(held.items.map((r) => String(r.group_key ?? r.asset_description ?? '').trim())));
         } catch {
           console.warn("First filter syntax failed, trying alternative...");
-          try {
+            try {
             const held = await pb.collection('assets').getList<AssetRecord>(1, 100, {
-              filter: `current_holder.id = "${authRecord.id}" && scrapped != true`,
+              filter: `current_holder.id = "${escapeFilterValue(authRecord.id)}" && scrapped != true`,
               requestKey: 'assets-held-by-user-2',
             });
             setHoldGroupKeys(new Set(held.items.map((r) => String(r.group_key ?? r.asset_description ?? '').trim())));
@@ -192,11 +270,10 @@ export default function AssetsPage() {
       } catch (holdErr: unknown) {
         // Log the error but don't fail the entire load
         console.error('Error fetching held assets:', holdErr);
-        const holdStatus = getErrorField(holdErr, 'status');
-        
-        if (holdStatus === 400) {
-          console.warn('Invalid filter query for current_holder. Check collection schema or field name.');
-        }
+          const holdDetails = formatErrorDetails(holdErr);
+          if (holdDetails.status === 400) {
+            console.warn('Invalid filter query for current_holder. Check collection schema or field name.');
+          }
         
         // Set empty hold keys and continue
         setHoldGroupKeys(new Set());
@@ -237,10 +314,32 @@ export default function AssetsPage() {
       }
 
       // 1. Find an available asset in this group to borrow
-      const availableAsset = await pb.collection('assets').getFirstListItem<AssetRecord>(
-        `(group_key = "${params.groupKey}" || asset_description = "${params.description}") && current_holder = "" && scrapped != true`,
-        { requestKey: `find-available-asset-${params.groupKey}` }
-      );
+      let availableAsset: AssetRecord | null = null;
+      try {
+        availableAsset = await pb.collection('assets').getFirstListItem<AssetRecord>(
+          `(group_key = "${params.groupKey}" || asset_description = "${params.description}") && current_holder = "" && scrapped != true`,
+          { requestKey: `find-available-asset-${params.groupKey}` }
+        );
+      } catch (findErr: unknown) {
+        const d = formatErrorDetails(findErr);
+        // If the server rejected the filter (bad request), fallback to a safer client-side selection
+        if (d.status === 400 || d.message.toLowerCase().includes('invalid') || d.message.toLowerCase().includes('bad request')) {
+          console.warn('Filter rejected by PocketBase, falling back to client-side selection:', d);
+            try {
+            const listRes = await pb.collection('assets').getList<AssetRecord>(1, 100, {
+              filter: `(group_key = "${escapeFilterValue(params.groupKey)}" || asset_description = "${escapeFilterValue(params.description)}")`,
+              requestKey: `find-available-asset-fallback-${escapeFilterValue(params.groupKey)}`,
+            });
+            availableAsset = listRes.items.find((r) => !r.current_holder && r.scrapped !== true) ?? null;
+          } catch (listErr) {
+            console.error('Fallback asset fetch failed:', formatErrorDetails(listErr));
+            availableAsset = null;
+          }
+        } else {
+          // Unknown error, rethrow to be handled by outer catch
+          throw findErr;
+        }
+      }
 
       if (!availableAsset) {
         alert('没有可借出的资产');
@@ -278,11 +377,10 @@ export default function AssetsPage() {
         alert('借出成功，但门控打开失败。请检查设备连接');
       }
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      const status = getErrorField(err, 'status');
-      const errorData = getErrorField(err, 'data');
-      console.error('Borrow error details:', { message: msg, status, data: errorData });
-      alert('借出失败: ' + msg);
+      const details = formatErrorDetails(err);
+      console.error('Borrow error details:', details);
+      const friendly = getFriendlyErrorMessage(details as { message: string; status?: number; data?: unknown });
+      alert('借出失败: ' + friendly);
     }
   }
 
@@ -296,10 +394,31 @@ export default function AssetsPage() {
       }
 
       // 1. Find the asset currently held by this user
-      const heldAsset = await pb.collection('assets').getFirstListItem<AssetRecord>(
-        `(group_key = "${params.groupKey}" || asset_description = "${params.description}") && current_holder = "${authRecord.id}" && scrapped != true`,
-        { requestKey: `find-held-asset-${params.groupKey}` }
-      );
+      let heldAsset: AssetRecord | null = null;
+      try {
+        heldAsset = await pb.collection('assets').getFirstListItem<AssetRecord>(
+          `(group_key = "${escapeFilterValue(params.groupKey)}" || asset_description = "${escapeFilterValue(params.description)}") && current_holder.id = "${escapeFilterValue(authRecord.id)}" && scrapped != true`,
+          { requestKey: `find-held-asset-${escapeFilterValue(params.groupKey)}` }
+        );
+      } catch (findErr: unknown) {
+        const d = formatErrorDetails(findErr);
+        if (d.status === 400 || d.message.toLowerCase().includes('invalid') || d.message.toLowerCase().includes('bad request')) {
+          console.warn('Return filter rejected by PocketBase, falling back to client-side selection:', d);
+          try {
+            const listRes = await pb.collection('assets').getList<AssetRecord>(1, 100, {
+              filter: `(group_key = "${escapeFilterValue(params.groupKey)}" || asset_description = "${escapeFilterValue(params.description)}")`,
+              requestKey: `find-held-asset-fallback-${escapeFilterValue(params.groupKey)}`,
+            });
+            const authId = authRecord.id;
+            heldAsset = listRes.items.find((r) => holderMatchesId(r.current_holder, authId) && r.scrapped !== true) ?? null;
+          } catch (listErr) {
+            console.error('Fallback held asset fetch failed:', formatErrorDetails(listErr));
+            heldAsset = null;
+          }
+        } else {
+          throw findErr;
+        }
+      }
 
       if (!heldAsset) {
         alert('未找到您借出的资产');
@@ -322,11 +441,10 @@ export default function AssetsPage() {
       loadAssets(); // Refresh
       alert('归还成功！');
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      const status = getErrorField(err, 'status');
-      const errorData = getErrorField(err, 'data');
-      console.error('Return error details:', { message: msg, status, data: errorData });
-      alert('归还失败: ' + msg);
+      const details = formatErrorDetails(err);
+      console.error('Return error details:', details);
+      const friendly = getFriendlyErrorMessage(details as { message: string; status?: number; data?: unknown });
+      alert('归还失败: ' + friendly);
     }
   }
 
@@ -335,7 +453,7 @@ export default function AssetsPage() {
       setIsSaving(true);
       // Get all assets in this group
       const records = await pb.collection('assets').getFullList<AssetRecord>({
-        filter: `group_key = "${groupKey}"`,
+        filter: `group_key = "${escapeFilterValue(groupKey)}"`,
       });
 
       // Update all records in the group
@@ -376,7 +494,7 @@ export default function AssetsPage() {
     setScrappingGroupKey(key);
     try {
       const records = await pb.collection('assets').getFullList<AssetRecord>({
-        filter: `group_key = "${params.groupKey}" || asset_description = "${params.description}"`,
+        filter: `group_key = "${escapeFilterValue(params.groupKey)}" || asset_description = "${escapeFilterValue(params.description)}"`,
       });
 
       for (const record of records) {
