@@ -7,21 +7,47 @@ import { AppShell } from '@/components/AppShell';
 
 interface LendRecord {
   id: string;
-  user: string;
+  userDisplay: string;
+  userId?: string;
+  userEmail?: string;
   asset_description: string;
   action: 'lend' | 'return';
   created: string;
 }
 
 function normalizeLendRecord(rec: any): LendRecord {
-  // The user field is now text (stores email directly)
+  const rawUser = rec?.user;
+  const expandedUser = rec?.expand?.user;
+  const userId = typeof rawUser === 'string' ? rawUser : String(rawUser?.id ?? '');
+  const userEmail = expandedUser?.email ? String(expandedUser.email) : '';
+  const userDisplay =
+    userEmail ||
+    (typeof rawUser === 'string' && rawUser.includes('@') ? rawUser : '') ||
+    userId ||
+    '未知用户';
+
   return {
     id: String(rec?.id ?? ''),
-    user: String(rec?.user ?? '未知用户'),
+    userDisplay,
+    userId: userId || undefined,
+    userEmail: userEmail || undefined,
     asset_description: String(rec?.asset_description ?? ''),
     action: rec?.action === 'return' ? 'return' : 'lend',
     created: String(rec?.created ?? new Date().toISOString()),
   };
+}
+
+function recordBelongsToUser(rec: any, authRecord: any): boolean {
+  const authId = String(authRecord?.id ?? '');
+  const authEmail = String(authRecord?.email ?? '');
+  const rawUser = rec?.user;
+  const expandedUser = rec?.expand?.user;
+
+  if (authId && rawUser === authId) return true;
+  if (authEmail && rawUser === authEmail) return true;
+  if (authId && expandedUser?.id === authId) return true;
+  if (authEmail && expandedUser?.email === authEmail) return true;
+  return false;
 }
 
 export default function RecordsPage() {
@@ -45,6 +71,7 @@ export default function RecordsPage() {
         // Disable auto-cancellation for this request
         const allResults = await pb.collection('lend_records').getList(1, 500, {
           sort: '-created',
+          expand: 'user',
           requestKey: null, // Disable auto-cancellation completely
         });
         
@@ -54,15 +81,16 @@ export default function RecordsPage() {
         if (isAdmin) {
           results = allResults;
         } else {
-          const userEmail = (authRecord as any)?.email;
-          if (!userEmail) {
+          const userId = String((authRecord as any)?.id ?? '');
+          const userEmail = String((authRecord as any)?.email ?? '');
+          if (!userId && !userEmail) {
             setRecords([]);
             setLoading(false);
             return;
           }
           results = {
             ...allResults,
-            items: allResults.items.filter((item: any) => item.user === userEmail),
+            items: allResults.items.filter((item: any) => recordBelongsToUser(item, authRecord)),
           };
         }
 
@@ -119,7 +147,7 @@ export default function RecordsPage() {
             <tbody>
               {records.map((rec) => (
                 <tr key={rec.id} className="border-b hover:bg-zinc-50/50">
-                  <td className="p-3">{rec.user}</td>
+                  <td className="p-3">{rec.userDisplay}</td>
                   <td className="p-3">{rec.asset_description}</td>
                   <td className="p-3">{rec.action === 'lend' ? '借出' : '归还'}</td>
                   <td className="p-3">{new Date(rec.created).toLocaleString('zh-CN')}</td>

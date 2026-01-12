@@ -199,7 +199,9 @@ export default function AssetsPage() {
 
       // 3. Create a lend record in the history
       await pb.collection('lend_records').create({
-        user: (authRecord as any)?.email || authRecord!.id, // Store email (text field)
+        // Use user id so it works when `lend_records.user` is a relation field.
+        // (If the PB collection is configured as text, storing the id is still valid.)
+        user: authRecord!.id,
         asset_group_key: params.groupKey,
         asset_description: params.description,
         action: 'lend',
@@ -251,7 +253,7 @@ export default function AssetsPage() {
 
       // 2. Create a return record in the history
       await pb.collection('lend_records').create({
-        user: (authRecord as any)?.email || authRecord!.id, // Store email (text field)
+        user: authRecord!.id,
         asset_group_key: params.groupKey,
         asset_description: params.description,
         action: 'return',
