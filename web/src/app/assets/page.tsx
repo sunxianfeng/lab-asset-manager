@@ -9,6 +9,23 @@ import { Card, CardImage } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { RenameAssetModal } from '@/components/RenameAssetModal';
+import { cn } from '@/lib/cn';
+
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return typeof v === 'object' && v !== null;
+}
+
+function getErrorField(e: unknown, key: string): unknown {
+  if (!isRecord(e)) return undefined;
+  return e[key];
+}
+
+function holderMatchesId(holder: unknown, id: string): boolean {
+  if (!id) return false;
+  if (holder === id) return true;
+  if (isRecord(holder) && holder.id === id) return true;
+  return false;
+}
 
 interface AssetGrouped {
   groupKey: string;
@@ -16,6 +33,8 @@ interface AssetGrouped {
   total: number;
   available: number;
   borrowed: number;
+  scrapped: number;
+  isScrapped: boolean;
   imageUrl?: string;
 }
 
@@ -26,6 +45,7 @@ interface AssetRecord {
   asset_description?: string;
   current_holder?: string;
   image?: string;
+  scrapped?: boolean;
   // Optional fields used elsewhere in app/export
   is_fixed_assets?: string;
   category?: string;
@@ -50,6 +70,7 @@ export default function AssetsPage() {
   const [mounted, setMounted] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const [viewMode, setViewMode] = useState<'card' | 'list'>('card');
+  const [scrappingGroupKey, setScrappingGroupKey] = useState<string | null>(null);
   const [renameModal, setRenameModal] = useState<{ isOpen: boolean; groupKey: string; currentName: string }>({
     isOpen: false,
     groupKey: '',
@@ -83,7 +104,7 @@ export default function AssetsPage() {
         const desc = descRaw || 'Unknown';
         const key = groupKey;
         if (!grouped[key]) {
-          grouped[key] = { groupKey, description: desc, total: 0, available: 0, borrowed: 0 };
+          grouped[key] = { groupKey, description: desc, total: 0, available: 0, borrowed: 0, scrapped: 0, isScrapped: false };
         }
         // Fill representative image per group (first available)
         if (!grouped[key].imageUrl && rec.image) {
@@ -92,13 +113,20 @@ export default function AssetsPage() {
           } catch {}
         }
         grouped[key].total++;
-        if (rec.current_holder) {
-          grouped[key].borrowed++;
-        } else {
-          grouped[key].available++;
+
+        if (rec.scrapped === true) {
+          grouped[key].scrapped++;
+          continue;
         }
+
+        if (rec.current_holder) grouped[key].borrowed++;
+        else grouped[key].available++;
       }
-      setGroups(Object.values(grouped));
+      const computedGroups = Object.values(grouped).map((g) => ({
+        ...g,
+        isScrapped: g.total > 0 && g.scrapped === g.total,
+      }));
+      setGroups(computedGroups);
 
       if (!authRecord?.id) {
         setHoldGroupKeys(new Set());
@@ -110,34 +138,31 @@ export default function AssetsPage() {
         // Try multiple filter syntaxes as PocketBase relation filters can be sensitive
         try {
           const held = await pb.collection('assets').getList<AssetRecord>(1, 100, {
-            filter: `current_holder = "${authRecord.id}"`,
+            filter: `current_holder = "${authRecord.id}" && scrapped != true`,
             requestKey: 'assets-held-by-user-1',
           });
           setHoldGroupKeys(new Set(held.items.map((r) => String(r.group_key ?? r.asset_description ?? '').trim())));
-        } catch (filterErr: unknown) {
+        } catch {
           console.warn("First filter syntax failed, trying alternative...");
           try {
             const held = await pb.collection('assets').getList<AssetRecord>(1, 100, {
-              filter: `current_holder.id = "${authRecord.id}"`,
+              filter: `current_holder.id = "${authRecord.id}" && scrapped != true`,
               requestKey: 'assets-held-by-user-2',
             });
             setHoldGroupKeys(new Set(held.items.map((r) => String(r.group_key ?? r.asset_description ?? '').trim())));
-          } catch (altErr: unknown) {
+          } catch {
             console.warn("Alternative filter failed, falling back to client-side filtering");
             const allRes = await pb.collection('assets').getList<AssetRecord>(1, 500, {
               requestKey: 'assets-held-fallback',
             });
-            const held = allRes.items.filter((item) => 
-              item.current_holder === authRecord.id || (item.current_holder as any)?.id === authRecord.id
-            );
+            const held = allRes.items.filter((item) => holderMatchesId(item.current_holder, authRecord.id) && item.scrapped !== true);
             setHoldGroupKeys(new Set(held.map((r) => String(r.group_key ?? r.asset_description ?? '').trim())));
           }
         }
       } catch (holdErr: unknown) {
         // Log the error but don't fail the entire load
         console.error('Error fetching held assets:', holdErr);
-        const holdMsg = holdErr instanceof Error ? holdErr.message : String(holdErr);
-        const holdStatus = (holdErr as any)?.status;
+        const holdStatus = getErrorField(holdErr, 'status');
         
         if (holdStatus === 400) {
           console.warn('Invalid filter query for current_holder. Check collection schema or field name.');
@@ -148,7 +173,7 @@ export default function AssetsPage() {
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
-      const status = (err as any)?.status;
+      const status = getErrorField(err, 'status');
       
       // Treat 404 (collection not found) as empty result
       if (msg.includes('Missing collection context') || status === 404) {
@@ -183,7 +208,7 @@ export default function AssetsPage() {
 
       // 1. Find an available asset in this group to borrow
       const availableAsset = await pb.collection('assets').getFirstListItem<AssetRecord>(
-        `(group_key = "${params.groupKey}" || asset_description = "${params.description}") && current_holder = ""`,
+        `(group_key = "${params.groupKey}" || asset_description = "${params.description}") && current_holder = "" && scrapped != true`,
         { requestKey: `find-available-asset-${params.groupKey}` }
       );
 
@@ -224,8 +249,8 @@ export default function AssetsPage() {
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
-      const status = (err as any)?.status;
-      const errorData = (err as any)?.data;
+      const status = getErrorField(err, 'status');
+      const errorData = getErrorField(err, 'data');
       console.error('Borrow error details:', { message: msg, status, data: errorData });
       alert('借出失败: ' + msg);
     }
@@ -242,7 +267,7 @@ export default function AssetsPage() {
 
       // 1. Find the asset currently held by this user
       const heldAsset = await pb.collection('assets').getFirstListItem<AssetRecord>(
-        `(group_key = "${params.groupKey}" || asset_description = "${params.description}") && current_holder = "${authRecord.id}"`,
+        `(group_key = "${params.groupKey}" || asset_description = "${params.description}") && current_holder = "${authRecord.id}" && scrapped != true`,
         { requestKey: `find-held-asset-${params.groupKey}` }
       );
 
@@ -268,8 +293,8 @@ export default function AssetsPage() {
       alert('归还成功！');
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
-      const status = (err as any)?.status;
-      const errorData = (err as any)?.data;
+      const status = getErrorField(err, 'status');
+      const errorData = getErrorField(err, 'data');
       console.error('Return error details:', { message: msg, status, data: errorData });
       alert('归还失败: ' + msg);
     }
@@ -301,6 +326,43 @@ export default function AssetsPage() {
       throw err;
     } finally {
       setIsSaving(false);
+    }
+  }
+
+  async function handleScrap(params: { groupKey: string; description: string; borrowed: number; isScrapped: boolean }) {
+    if (!isAdmin) {
+      alert('仅管理员可以报废资产');
+      return;
+    }
+    if (params.isScrapped) return;
+    if (params.borrowed > 0) {
+      alert('该设备仍有借出中的资产 unit，请先归还后再报废。');
+      return;
+    }
+    const ok = confirm(`确认报废“${params.description}”吗？\n\n报废后将禁止借出/归还/重命名。`);
+    if (!ok) return;
+
+    const key = (params.groupKey || params.description).trim();
+    setScrappingGroupKey(key);
+    try {
+      const records = await pb.collection('assets').getFullList<AssetRecord>({
+        filter: `group_key = "${params.groupKey}" || asset_description = "${params.description}"`,
+      });
+
+      for (const record of records) {
+        await pb.collection('assets').update(record.id, {
+          scrapped: true,
+          current_holder: '',
+        });
+      }
+
+      await loadAssets();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error('Scrap failed:', msg);
+      alert('报废失败: ' + msg);
+    } finally {
+      setScrappingGroupKey(null);
     }
   }
 
@@ -378,19 +440,34 @@ export default function AssetsPage() {
       ) : viewMode === 'card' ? (
         <div className="grid gap-6 grid-cols-[repeat(auto-fit,minmax(280px,1fr))]">
           {groups.map((group) => (
-            <Card key={group.groupKey || group.description} className="p-0 overflow-hidden flex flex-col">
+            <Card
+              key={group.groupKey || group.description}
+              className={cn(
+                'p-0 overflow-hidden flex flex-col relative',
+                group.isScrapped && 'opacity-60 shadow-lg ring-1 ring-black/10'
+              )}
+            >
+              {group.isScrapped && (
+                <div className="pointer-events-none absolute inset-0 bg-black/5" />
+              )}
               <CardImage src={group.imageUrl} className="rounded-none rounded-t-[24px]" />
               <div className="p-5 flex flex-col gap-3 flex-1">
                 <h2 className="text-lg font-bold text-black dark:text-white">{group.description}</h2>
                 <div className="flex flex-wrap gap-2">
                   <Badge tone="green">可借 {group.available}</Badge>
                   <Badge tone="blue">已借 {group.borrowed}</Badge>
+                  {group.scrapped > 0 && (
+                    <Badge tone="red">报废 {group.scrapped}</Badge>
+                  )}
+                  {group.isScrapped && (
+                    <Badge tone="red">已报废</Badge>
+                  )}
                 </div>
                 <div className="flex gap-2 mt-auto pt-2">
                   <Button
                     variant="primary"
                     size="sm"
-                    disabled={group.available === 0}
+                    disabled={group.available === 0 || group.isScrapped}
                     onClick={() => handleBorrow({ groupKey: group.groupKey, description: group.description })}
                   >
                     借出
@@ -398,26 +475,44 @@ export default function AssetsPage() {
                   <Button
                     variant="secondary"
                     size="sm"
-                    disabled={!group.groupKey || !holdGroupKeys.has(group.groupKey)}
+                    disabled={group.isScrapped || !group.groupKey || !holdGroupKeys.has(group.groupKey)}
                     onClick={() => handleReturn({ groupKey: group.groupKey, description: group.description })}
                   >
                     归还
                   </Button>
+
                   {isAdmin && (
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      onClick={() =>
-                        setRenameModal({
-                          isOpen: true,
-                          groupKey: group.groupKey,
-                          currentName: group.description,
-                        })
-                      }
-                      className="ml-auto"
-                    >
-                      重命名
-                    </Button>
+                    <div className="ml-auto flex gap-2">
+                      <Button
+                        variant="danger"
+                        size="sm"
+                        disabled={group.isScrapped || group.borrowed > 0 || scrappingGroupKey === (group.groupKey || group.description).trim()}
+                        onClick={() =>
+                          handleScrap({
+                            groupKey: group.groupKey,
+                            description: group.description,
+                            borrowed: group.borrowed,
+                            isScrapped: group.isScrapped,
+                          })
+                        }
+                      >
+                        报废
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        disabled={group.isScrapped}
+                        onClick={() =>
+                          setRenameModal({
+                            isOpen: true,
+                            groupKey: group.groupKey,
+                            currentName: group.description,
+                          })
+                        }
+                      >
+                        重命名
+                      </Button>
+                    </div>
                   )}
                 </div>
               </div>
@@ -429,8 +524,14 @@ export default function AssetsPage() {
           {groups.map((group) => (
             <div
               key={group.groupKey || group.description}
-              className="bg-white dark:bg-gray-800 rounded-lg p-4 flex items-center justify-between border border-gray-200 dark:border-gray-700"
+              className={cn(
+                'bg-white dark:bg-gray-800 rounded-lg p-4 flex items-center justify-between border border-gray-200 dark:border-gray-700 relative',
+                group.isScrapped && 'opacity-60 shadow-lg ring-1 ring-black/10'
+              )}
             >
+              {group.isScrapped && (
+                <div className="pointer-events-none absolute inset-0 rounded-lg bg-black/5" />
+              )}
               <div className="flex items-center gap-4 flex-1">
                 {group.imageUrl && (
                   <img
@@ -448,6 +549,16 @@ export default function AssetsPage() {
                     <span className="text-sm text-gray-600 dark:text-gray-400">
                       <Badge tone="blue">已借 {group.borrowed}</Badge>
                     </span>
+                    {group.scrapped > 0 && (
+                      <span className="text-sm text-gray-600 dark:text-gray-400">
+                        <Badge tone="red">报废 {group.scrapped}</Badge>
+                      </span>
+                    )}
+                    {group.isScrapped && (
+                      <span className="text-sm text-gray-600 dark:text-gray-400">
+                        <Badge tone="red">已报废</Badge>
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>
@@ -455,7 +566,7 @@ export default function AssetsPage() {
                 <Button
                   variant="primary"
                   size="sm"
-                  disabled={group.available === 0}
+                  disabled={group.available === 0 || group.isScrapped}
                   onClick={() => handleBorrow({ groupKey: group.groupKey, description: group.description })}
                 >
                   借出
@@ -463,25 +574,43 @@ export default function AssetsPage() {
                 <Button
                   variant="secondary"
                   size="sm"
-                  disabled={!group.groupKey || !holdGroupKeys.has(group.groupKey)}
+                  disabled={group.isScrapped || !group.groupKey || !holdGroupKeys.has(group.groupKey)}
                   onClick={() => handleReturn({ groupKey: group.groupKey, description: group.description })}
                 >
                   归还
                 </Button>
                 {isAdmin && (
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={() =>
-                      setRenameModal({
-                        isOpen: true,
-                        groupKey: group.groupKey,
-                        currentName: group.description,
-                      })
-                    }
-                  >
-                    重命名
-                  </Button>
+                  <>
+                    <Button
+                      variant="danger"
+                      size="sm"
+                      disabled={group.isScrapped || group.borrowed > 0 || scrappingGroupKey === (group.groupKey || group.description).trim()}
+                      onClick={() =>
+                        handleScrap({
+                          groupKey: group.groupKey,
+                          description: group.description,
+                          borrowed: group.borrowed,
+                          isScrapped: group.isScrapped,
+                        })
+                      }
+                    >
+                      报废
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      disabled={group.isScrapped}
+                      onClick={() =>
+                        setRenameModal({
+                          isOpen: true,
+                          groupKey: group.groupKey,
+                          currentName: group.description,
+                        })
+                      }
+                    >
+                      重命名
+                    </Button>
+                  </>
                 )}
               </div>
             </div>

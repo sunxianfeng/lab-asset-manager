@@ -20,11 +20,35 @@ export default function LoginPage() {
     setError('');
     setLoading(true);
     try {
-      // PocketBase authWithPassword accepts email or username as identity
-      await pb.collection('users').authWithPassword(identity, password);
+      const normalizedIdentity = identity.trim();
+      const normalizedPassword = password;
+
+      // PocketBase authWithPassword can accept email or username as identity,
+      // but it is sensitive to leading/trailing spaces and (sometimes) email casing.
+      const candidates = normalizedIdentity.includes('@')
+        ? [normalizedIdentity, normalizedIdentity.toLowerCase()]
+        : [normalizedIdentity];
+
+      let lastErr: unknown;
+      for (const cand of candidates) {
+        try {
+          await pb.collection('users').authWithPassword(cand, normalizedPassword);
+          lastErr = undefined;
+          break;
+        } catch (err: unknown) {
+          lastErr = err;
+        }
+      }
+
+      if (lastErr) throw lastErr;
       router.push('/assets');
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : '登录失败，请检查邮箱/用户名和密码');
+      const msg = err instanceof Error ? err.message : '';
+      if (msg.toLowerCase().includes('failed to authenticate') && identity.trim().includes('@')) {
+        setError('邮箱登录失败：请确认账号邮箱已填写且 PocketBase 的 users 集合开启了 Email 登录（Allow email authentication）。');
+      } else {
+        setError(msg || '登录失败，请检查邮箱/用户名和密码');
+      }
     } finally {
       setLoading(false);
     }
@@ -56,7 +80,7 @@ export default function LoginPage() {
         </form>
         <div className="mt-6 text-center text-sm text-zinc-600">
           还没有账户？{' '}
-          <Link href="/auth/register" className="text-[var(--accent)] hover:underline font-semibold">
+          <Link href="/auth/register" className="text-(--accent) hover:underline font-semibold">
             立即注册
           </Link>
         </div>

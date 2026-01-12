@@ -30,6 +30,8 @@ export default function RegisterPage() {
     e.preventDefault();
     setError('');
 
+    const normalizedEmail = email.trim().toLowerCase();
+
     // Validate passwords match
     if (password !== passwordConfirm) {
       setError('两次输入的密码不一致');
@@ -47,7 +49,7 @@ export default function RegisterPage() {
       // Create the user
       await pb.collection('users').create({
         username,
-        email,
+        email: normalizedEmail,
         password,
         passwordConfirm,
         role: 'user',
@@ -56,7 +58,7 @@ export default function RegisterPage() {
 
       // Automatically log in after registration
       // Use the email as the identity for authentication (PocketBase default)
-      await pb.collection('users').authWithPassword(email, password);
+      await pb.collection('users').authWithPassword(normalizedEmail, password);
       
       // Redirect to assets page
       router.push('/assets');

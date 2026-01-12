@@ -101,7 +101,9 @@ async function extractEmbeddedImagesFromXlsx(xlsxBytes: Uint8Array, onlySheetNam
   const wbRels = wbRelsXml ? parseRelsXml(wbRelsXml, parser) : [];
   const wbRelMap = new Map<string, string>();
   for (const r of wbRels) {
-    if (r?.Id && r?.Target) wbRelMap.set(r.Id, r.Target);
+    const id = (r as unknown as { Id?: unknown })?.Id;
+    const target = (r as unknown as { Target?: unknown })?.Target;
+    if (typeof id === "string" && typeof target === "string") wbRelMap.set(id, target);
   }
 
   const sheets = findSheetList(wbXml, parser);
@@ -142,7 +144,9 @@ async function extractEmbeddedImagesFromXlsx(xlsxBytes: Uint8Array, onlySheetNam
     const sheetRels = sheetRelsXml ? parseRelsXml(sheetRelsXml, parser) : [];
     const sheetRelMap = new Map<string, string>();
     for (const r of sheetRels) {
-      if (r?.Id && r?.Target) sheetRelMap.set(r.Id, r.Target);
+      const id = (r as unknown as { Id?: unknown })?.Id;
+      const target = (r as unknown as { Target?: unknown })?.Target;
+      if (typeof id === "string" && typeof target === "string") sheetRelMap.set(id, target);
     }
 
     const drawingTarget = sheetRelMap.get(drawingRid);
@@ -173,7 +177,9 @@ async function extractEmbeddedImagesFromXlsx(xlsxBytes: Uint8Array, onlySheetNam
     const drawingRels = drawingRelsXml ? parseRelsXml(drawingRelsXml, parser) : [];
     const drawingRelMap = new Map<string, string>();
     for (const r of drawingRels) {
-      if (r?.Id && r?.Target) drawingRelMap.set(r.Id, r.Target);
+      const id = (r as unknown as { Id?: unknown })?.Id;
+      const target = (r as unknown as { Target?: unknown })?.Target;
+      if (typeof id === "string" && typeof target === "string") drawingRelMap.set(id, target);
     }
 
     for (const anc of anchors) {
@@ -313,7 +319,7 @@ export async function POST(req: Request) {
       const embedded = imageByDataRowIndex.get(sourceRowIndex);
       if (embedded) {
         const mime = extToMime(embedded.filename);
-        const blob = new Blob([embedded.bytes], { type: mime });
+        const blob = new Blob([Buffer.from(embedded.bytes)], { type: mime });
         fd.append("image", blob, embedded.filename);
       } else {
         // Fallback: if unit.image_url is a URL/data URI, fetch and upload

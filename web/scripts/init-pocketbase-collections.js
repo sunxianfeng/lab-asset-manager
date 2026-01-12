@@ -40,8 +40,39 @@ async function main() {
   console.log(`🔗 Connecting to PocketBase at ${pbUrl}...`);
   const pb = new PocketBase(pbUrl);
 
+  async function authAdminOrSuperuser() {
+    const endpoints = [
+      `${pbUrl}/api/admins/auth-with-password`,
+      `${pbUrl}/api/superusers/auth-with-password`,
+    ];
+
+    let lastErr;
+    for (const url of endpoints) {
+      try {
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ identity: email, password }),
+        });
+        if (!res.ok) {
+          const text = await res.text().catch(() => '');
+          throw new Error(`HTTP ${res.status} from ${url}: ${text || res.statusText}`);
+        }
+        const json = await res.json();
+        const token = json?.token;
+        const record = json?.record;
+        if (!token) throw new Error(`Auth succeeded but no token returned from ${url}`);
+        pb.authStore.save(token, record);
+        return;
+      } catch (e) {
+        lastErr = e;
+      }
+    }
+    throw lastErr;
+  }
+
   try {
-    await pb.admins.authWithPassword(email, password);
+    await authAdminOrSuperuser();
     console.log('✅ Admin authenticated successfully\n');
   } catch (err) {
     console.error('❌ Failed to authenticate admin:', err.message || err);
@@ -87,6 +118,7 @@ async function main() {
         { name: 'remarks', type: 'text', required: false, options: {} },
         { name: 'status', type: 'select', required: false, options: { maxSelect: 1, values: ['available', 'borrowed'] } },
         { name: 'is_fixed_assets', type: 'bool', required: false, options: {} },
+        { name: 'scrapped', type: 'bool', required: false, options: {} },
         { name: 'current_holder', type: 'relation', required: false, options: { collectionId: '_pb_users_auth_', maxSelect: 1, cascadeDelete: false } },
         { name: 'image', type: 'file', required: false, options: { maxSelect: 1, maxSize: 5242880, mimeTypes: ['image/jpeg', 'image/png', 'image/gif', 'image/webp'], thumbs: ['100x100', '300x300'] } },
         { name: 'import_ref', type: 'relation', required: false, options: { collectionId: 'asset_imports', maxSelect: 1, cascadeDelete: false } },
