@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { pb } from '@/lib/pocketbase';
@@ -92,6 +92,31 @@ export default function AssetsPage() {
     // Load assets regardless of auth status
     loadAssets();
   }, [router]);
+
+  // Handle clicking outside to close dropdown
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (openDropdown) {
+        const target = event.target as Element;
+        // Check if the click is outside any dropdown menu
+        const dropdowns = document.querySelectorAll('[data-dropdown-menu]');
+        let isClickInsideDropdown = false;
+        dropdowns.forEach(dropdown => {
+          if (dropdown.contains(target)) {
+            isClickInsideDropdown = true;
+          }
+        });
+        if (!isClickInsideDropdown) {
+          setOpenDropdown(null);
+        }
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [openDropdown]);
 
   async function loadAssets() {
     try {
@@ -501,6 +526,7 @@ export default function AssetsPage() {
                       {openDropdown === (group.groupKey || group.description) && (
                         <div 
                           className="absolute right-0 top-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md shadow-lg z-50 min-w-[120px]"
+                          data-dropdown-menu
                           onMouseLeave={() => setOpenDropdown(null)}
                         >
                           <button
@@ -617,6 +643,7 @@ export default function AssetsPage() {
                     {openDropdown === (group.groupKey || group.description) && (
                       <div 
                         className="absolute right-0 top-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md shadow-lg z-50 min-w-[120px]"
+                        data-dropdown-menu
                         onMouseLeave={() => setOpenDropdown(null)}
                       >
                         <button
