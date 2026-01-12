@@ -76,7 +76,12 @@ export default function AssetsPage() {
     groupKey: '',
     currentName: '',
   });
+  const [openDropdown, setOpenDropdown] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+
+  function toggleDropdown(groupKey: string) {
+    setOpenDropdown(openDropdown === groupKey ? null : groupKey);
+  }
   useEffect(() => {
     setMounted(true);
     const authRecord = pb.authStore.model;
@@ -443,8 +448,9 @@ export default function AssetsPage() {
             <Card
               key={group.groupKey || group.description}
               className={cn(
-                'p-0 overflow-hidden flex flex-col relative',
-                group.isScrapped && 'opacity-60 shadow-lg ring-1 ring-black/10'
+                'p-0 overflow-visible flex flex-col relative',
+                group.isScrapped && 'opacity-60 shadow-lg ring-1 ring-black/10',
+                openDropdown === (group.groupKey || group.description) && 'z-20'
               )}
             >
               {group.isScrapped && (
@@ -482,36 +488,54 @@ export default function AssetsPage() {
                   </Button>
 
                   {isAdmin && (
-                    <div className="ml-auto flex gap-2">
-                      <Button
-                        variant="danger"
-                        size="sm"
-                        disabled={group.isScrapped || group.borrowed > 0 || scrappingGroupKey === (group.groupKey || group.description).trim()}
-                        onClick={() =>
-                          handleScrap({
-                            groupKey: group.groupKey,
-                            description: group.description,
-                            borrowed: group.borrowed,
-                            isScrapped: group.isScrapped,
-                          })
-                        }
+                    <div className="ml-auto relative">
+                      <button
+                        onClick={() => toggleDropdown(group.groupKey || group.description)}
+                        className="p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 transition"
+                        title="更多操作"
                       >
-                        报废
-                      </Button>
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        disabled={group.isScrapped}
-                        onClick={() =>
-                          setRenameModal({
-                            isOpen: true,
-                            groupKey: group.groupKey,
-                            currentName: group.description,
-                          })
-                        }
-                      >
-                        重命名
-                      </Button>
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </svg>
+                      </button>
+                      {openDropdown === (group.groupKey || group.description) && (
+                        <div 
+                          className="absolute right-0 top-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md shadow-lg z-50 min-w-[120px]"
+                          onMouseLeave={() => setOpenDropdown(null)}
+                        >
+                          <button
+                            type="button"
+                            className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-700 text-red-600 dark:text-red-400 disabled:opacity-50 disabled:cursor-not-allowed block"
+                            disabled={group.isScrapped || group.borrowed > 0 || scrappingGroupKey === (group.groupKey || group.description).trim()}
+                            onClick={() => {
+                              handleScrap({
+                                groupKey: group.groupKey,
+                                description: group.description,
+                                borrowed: group.borrowed,
+                                isScrapped: group.isScrapped,
+                              });
+                              setOpenDropdown(null);
+                            }}
+                          >
+                            报废
+                          </button>
+                          <button
+                            type="button"
+                            className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-900 dark:text-gray-100 disabled:opacity-50 disabled:cursor-not-allowed block border-t border-gray-200 dark:border-gray-600"
+                            disabled={group.isScrapped}
+                            onClick={() => {
+                              setRenameModal({
+                                isOpen: true,
+                                groupKey: group.groupKey,
+                                currentName: group.description,
+                              });
+                              setOpenDropdown(null);
+                            }}
+                          >
+                            重命名
+                          </button>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -580,37 +604,55 @@ export default function AssetsPage() {
                   归还
                 </Button>
                 {isAdmin && (
-                  <>
-                    <Button
-                      variant="danger"
-                      size="sm"
-                      disabled={group.isScrapped || group.borrowed > 0 || scrappingGroupKey === (group.groupKey || group.description).trim()}
-                      onClick={() =>
-                        handleScrap({
-                          groupKey: group.groupKey,
-                          description: group.description,
-                          borrowed: group.borrowed,
-                          isScrapped: group.isScrapped,
-                        })
-                      }
+                  <div className="relative">
+                    <button
+                      onClick={() => toggleDropdown(group.groupKey || group.description)}
+                      className="p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 transition"
+                      title="更多操作"
                     >
-                      报废
-                    </Button>
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      disabled={group.isScrapped}
-                      onClick={() =>
-                        setRenameModal({
-                          isOpen: true,
-                          groupKey: group.groupKey,
-                          currentName: group.description,
-                        })
-                      }
-                    >
-                      重命名
-                    </Button>
-                  </>
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </button>
+                    {openDropdown === (group.groupKey || group.description) && (
+                      <div 
+                        className="absolute right-0 top-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md shadow-lg z-50 min-w-[120px]"
+                        onMouseLeave={() => setOpenDropdown(null)}
+                      >
+                        <button
+                          type="button"
+                          className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-700 text-red-600 dark:text-red-400 disabled:opacity-50 disabled:cursor-not-allowed block"
+                          disabled={group.isScrapped || group.borrowed > 0 || scrappingGroupKey === (group.groupKey || group.description).trim()}
+                          onClick={() => {
+                            handleScrap({
+                              groupKey: group.groupKey,
+                              description: group.description,
+                              borrowed: group.borrowed,
+                              isScrapped: group.isScrapped,
+                            });
+                            setOpenDropdown(null);
+                          }}
+                        >
+                          报废
+                        </button>
+                        <button
+                          type="button"
+                          className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-900 dark:text-gray-100 disabled:opacity-50 disabled:cursor-not-allowed block border-t border-gray-200 dark:border-gray-600"
+                          disabled={group.isScrapped}
+                          onClick={() => {
+                            setRenameModal({
+                              isOpen: true,
+                              groupKey: group.groupKey,
+                              currentName: group.description,
+                            });
+                            setOpenDropdown(null);
+                          }}
+                        >
+                          重命名
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 )}
               </div>
             </div>

@@ -17,6 +17,16 @@ type PocketBaseError = {
   };
 };
 
+function extractPbErrorMessage(err: unknown): string | undefined {
+  const pbErr = err as PocketBaseError;
+  const fieldErrors = pbErr?.data?.data;
+  const firstFieldMessage = fieldErrors
+    ? Object.values(fieldErrors).find((v) => v?.message)?.message
+    : undefined;
+
+  return firstFieldMessage || pbErr?.data?.message || pbErr?.message;
+}
+
 export default function RegisterPage() {
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
@@ -30,6 +40,7 @@ export default function RegisterPage() {
     e.preventDefault();
     setError('');
 
+    const normalizedUsername = username.trim();
     const normalizedEmail = email.trim().toLowerCase();
 
     // Validate passwords match
@@ -48,7 +59,7 @@ export default function RegisterPage() {
     try {
       // Create the user
       await pb.collection('users').create({
-        username,
+        username: normalizedUsername,
         email: normalizedEmail,
         password,
         passwordConfirm,
@@ -56,25 +67,49 @@ export default function RegisterPage() {
         emailVisibility: true,
       });
 
-      // Automatically log in after registration
-      // Use the email as the identity for authentication (PocketBase default)
-      await pb.collection('users').authWithPassword(normalizedEmail, password);
-      
-      // Redirect to assets page
-      router.push('/assets');
-    } catch (err: unknown) {
-      const pbErr = err as PocketBaseError;
-      const fieldErrors = pbErr?.data?.data;
-      const firstFieldMessage = fieldErrors
-        ? Object.values(fieldErrors).find((v) => v?.message)?.message
-        : undefined;
+      // Automatically log in after registration.
+      // Notes:
+      // - Some PocketBase setups disable email auth, requiring username.
+      // - Some require email verification before login.
+      const candidates = [normalizedEmail, normalizedUsername].filter(Boolean);
 
+      let authed = false;
+      let lastAuthErr: unknown;
+      for (const cand of candidates) {
+        try {
+          await pb.collection('users').authWithPassword(cand, password);
+          authed = true;
+          lastAuthErr = undefined;
+          break;
+        } catch (err: unknown) {
+          lastAuthErr = err;
+        }
+      }
+
+      if (authed) {
+        router.push('/assets');
+        return;
+      }
+
+      // Registration succeeded but auto-login failed.
+      // Best-effort: request email verification (no-op if email auth/verification is disabled).
+      try {
+        if (normalizedEmail) {
+          await pb.collection('users').requestVerification(normalizedEmail);
+        }
+      } catch {
+        // ignore
+      }
+
+      const authMsg = extractPbErrorMessage(lastAuthErr);
       setError(
-        firstFieldMessage ||
-          pbErr?.data?.message ||
-          pbErr?.message ||
-          '注册失败，请检查输入信息'
+        authMsg?.toLowerCase().includes('failed to authenticate')
+          ? '注册成功，但自动登录失败：可能需要先验证邮箱或未开启邮箱登录。请前往登录页使用用户名登录，或先完成邮箱验证。'
+          : `注册成功，但自动登录失败：${authMsg || '请前往登录页手动登录'}`
       );
+      router.push('/auth/login');
+    } catch (err: unknown) {
+      setError(extractPbErrorMessage(err) || '注册失败，请检查输入信息');
     } finally {
       setLoading(false);
     }
