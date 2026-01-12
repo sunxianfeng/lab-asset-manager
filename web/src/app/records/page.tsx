@@ -214,13 +214,6 @@ export default function RecordsPage() {
       actions={
         <div className="flex gap-2">
           <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => router.push('/maintenance')}
-          >
-            维修与计量
-          </Button>
-          <Button
             variant={showOutstandingOnly ? 'primary' : 'secondary'}
             size="sm"
             onClick={() => setShowOutstandingOnly((v) => !v)}
