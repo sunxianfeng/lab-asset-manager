@@ -138,6 +138,13 @@ Notes:
     - maxSelect: 1
     - cascadeDelete: false
 
+- `action`
+  - 类型: select (单选)
+  - Required: 是
+  - Options:
+    - maxSelect: 1
+    - values: ["lend", "return"]
+
 - `asset_group_key`
   - 类型: text
   - Required: 否
@@ -148,12 +155,18 @@ Notes:
   - Required: 否
   - Options: {}
 
-- `action`
-  - 类型: select (单选)
-  - Required: 是
+- `asset_unit`
+  - 类型: relation (单选)
+  - Required: 否
   - Options:
+    - collectionId: `_pb_users_auth_`
     - maxSelect: 1
-    - values: ["lend", "return"]
+    - cascadeDelete: false
+
+- `occurred_at`
+  - 类型: date/time (datetime)
+  - Required: 否
+  - Options: {}
 
 ---
 
