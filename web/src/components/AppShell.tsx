@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef } from 'react';
 import Link from "next/link";
+import { usePathname } from 'next/navigation';
 import { cn } from "@/lib/cn";
 import { pb } from "@/lib/pocketbase";
 
@@ -20,6 +21,7 @@ export function AppShell({
   const [userRole, setUserRole] = useState<string>('');
   const [showUserMenu, setShowUserMenu] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
+  const pathname = usePathname();
 
   useEffect(() => {
     const authRecord = pb.authStore.model;
@@ -60,9 +62,11 @@ export function AppShell({
             资产管理系统
           </Link>
           <div className="flex gap-4 text-sm font-medium text-zinc-700 dark:text-zinc-200">
-            <Link href="/assets" className="hover:text-black dark:hover:text-white transition-colors">资产</Link>
-            <Link href="/records" className="hover:text-black dark:hover:text-white transition-colors">借阅记录</Link>
-            <Link href="/settings" className="hover:text-black dark:hover:text-white transition-colors">设置</Link>
+            <Link href="/assets" className={cn("px-3 py-2 rounded-lg transition-colors", pathname === '/assets' ? "bg-zinc-200 dark:bg-zinc-800 text-black dark:text-white" : "hover:text-black dark:hover:text-white")}>资产</Link>
+            <Link href="/records" className={cn("px-3 py-2 rounded-lg transition-colors", pathname === '/records' ? "bg-zinc-200 dark:bg-zinc-800 text-black dark:text-white" : "hover:text-black dark:hover:text-white")}>借阅记录</Link>
+            <Link href="/maintenance" className={cn("px-3 py-2 rounded-lg transition-colors", pathname === '/maintenance' ? "bg-zinc-200 dark:bg-zinc-800 text-black dark:text-white" : "hover:text-black dark:hover:text-white")}>维修与计量</Link>
+            <Link href="/inventory" className={cn("px-3 py-2 rounded-lg transition-colors", pathname === '/inventory' ? "bg-zinc-200 dark:bg-zinc-800 text-black dark:text-white" : "hover:text-black dark:hover:text-white")}>资产盘点</Link>
+            <Link href="/settings" className={cn("px-3 py-2 rounded-lg transition-colors", pathname === '/settings' ? "bg-zinc-200 dark:bg-zinc-800 text-black dark:text-white" : "hover:text-black dark:hover:text-white")}>设置</Link>
           </div>
           {username && (
             <div className="relative ml-auto" ref={userMenuRef}>

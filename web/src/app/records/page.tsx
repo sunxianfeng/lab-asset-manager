@@ -212,13 +212,22 @@ export default function RecordsPage() {
     <AppShell
       title="借还记录"
       actions={
-        <Button
-          variant={showOutstandingOnly ? 'primary' : 'secondary'}
-          size="sm"
-          onClick={() => setShowOutstandingOnly((v) => !v)}
-        >
-          {showOutstandingOnly ? '显示全部' : '查看未归还'}
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => router.push('/maintenance')}
+          >
+            维修与计量
+          </Button>
+          <Button
+            variant={showOutstandingOnly ? 'primary' : 'secondary'}
+            size="sm"
+            onClick={() => setShowOutstandingOnly((v) => !v)}
+          >
+            {showOutstandingOnly ? '显示全部' : '查看未归还'}
+          </Button>
+        </div>
       }
     >
       {loading ? (
